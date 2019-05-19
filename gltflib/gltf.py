@@ -248,7 +248,8 @@ class GLTF:
         if self.model.buffers is not None:
             uris.update([buffer.uri for buffer in self.model.buffers if buffer.uri is not None])
         if self.model.images is not None:
-            uris.update([image.uri for image in self.model.images if image.uri is not None])
+            uris.update([image.uri for image in self.model.images
+                         if image.uri is not None and image.bufferView is None])
         return uris
 
     def _load_file_resources(self, basepath: str, autoload=False) -> None:
@@ -366,61 +367,34 @@ class GLTF:
             f.write(data)
 
     def _embed_buffer_resources(self):
-        glb_resource = self.get_glb_resource()
-        data = bytearray()
-        offset = 0 if glb_resource is None else len(glb_resource.data)
-        if self.model.buffers is not None:
-            keep_buffers = []
-            for i, buffer in enumerate(self.model.buffers):
-                if buffer.uri is None:
-                    # Already embedded
-                    keep_buffers.append(buffer)
-                    continue
+        if self.model.buffers is None:
+            return
+        for i, buffer in enumerate(self.model.buffers):
+            if buffer.uri is not None:
                 resource = self.get_resource(buffer.uri)
                 if resource is None:
                     raise RuntimeError(f'Missing resource: "{buffer.uri}" (referenced in buffer with index {i})')
-                if isinstance(resource, FileResource):
-                    if not resource.loaded:
-                        resource.load()
-                    data.extend(resource.data)
-                    bytelen = padbytes(data, 4, offset=offset)
-                    self._embed_buffer_views(i, offset)
-                    offset += bytelen
-                    self.resources.remove(resource)
-                else:
-                    keep_buffers.append(buffer)
-                # TODO: Handle data URIs
-            self.model.buffers = keep_buffers
-        if len(data) > 0:
-            self._create_or_extend_glb_resource(data)
+                self.embed_resource(resource)
 
     def _embed_image_resources(self):
-        glb_resource = self.get_glb_resource()
-        data = bytearray()
-        offset = 0 if glb_resource is None else len(glb_resource.data)
-        if self.model.images is not None:
-            for i, image in enumerate(self.model.images):
-                # TODO: Handle data URIs
-                if image.uri is None:
-                    continue
+        if self.model.images is None:
+            return
+        for i, image in enumerate(self.model.images):
+            if image.uri is not None and image.bufferView is None:
                 resource = self.get_resource(image.uri)
                 if resource is None:
                     raise RuntimeError(f'Missing resource: "{image.uri}" (referenced in image with index {i})')
-                if isinstance(resource, FileResource):
-                    if not resource.loaded:
-                        resource.load()
-                    data.extend(resource.data)
-                    bytelen = padbytes(data, 4, offset=offset)
-                    image.uri = None
-                    image.bufferView = self._create_embedded_image_buffer_view(offset, len(resource.data))
+                self.embed_resource(resource)
+                if isinstance(resource, FileResource) and resource.mimetype:
                     image.mimeType = resource.mimetype
-                    offset += bytelen
-                    self.resources.remove(resource)
-        if len(data) > 0:
-            self._create_or_extend_glb_resource(data)
 
     def _get_or_create_glb_buffer(self):
         if self.model.buffers is None or len(self.model.buffers) == 0:
+            # There are no buffers in the model yet. Ensure there are no buffer views, as that would indicate an error.
+            if self.model.bufferViews is not None and len(self.model.bufferViews) > 0:
+                raise RuntimeError(f'Model contains a buffer view without a buffer. This is not valid and indicates '
+                                   f'the model is likely corrupt.')
+            # Create a GLB buffer
             buffer = Buffer(byteLength=0)
             self.model.buffers = [buffer]
             return buffer
@@ -437,6 +411,10 @@ class GLTF:
         # Create a GLB-stored buffer with an undefined URI and insert it as the first buffer in the list.
         buffer = Buffer(byteLength=0)
         self.model.buffers.insert(0, buffer)
+        # Increment the buffer index on all existing buffer views by 1 to account for the newly-inserted buffer.
+        if self.model.bufferViews is not None:
+            for buffer_view in self.model.bufferViews:
+                buffer_view.buffer += 1
         return buffer
 
     def _create_or_extend_glb_resource(self, data: bytearray) -> (GLBResource, int, int):
@@ -444,8 +422,7 @@ class GLTF:
         glb_resource = self.get_glb_resource()
         if glb_resource is None:
             offset = 0
-            buffer_bytelen = bytelen
-            padbytes(data, 4)
+            buffer_bytelen = padbytes(data, 4)
             glb_resource = GLBResource(data)
             self.resources.append(glb_resource)
         else:
