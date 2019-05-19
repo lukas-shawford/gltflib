@@ -3,7 +3,9 @@ import shutil
 import json
 from os import path
 from unittest import TestCase
-from gltflib import GLTF, GLTFModel, Asset, FileResource, ExternalResource, Buffer, BufferView, Image, GLBResource
+from gltflib import (
+    GLTF, GLTFModel, Asset, FileResource, ExternalResource, Buffer, BufferView, Image, GLBResource,
+    GLB_BINARY_CHUNK_TYPE)
 
 
 # Temporary directory used for tests
@@ -219,11 +221,114 @@ class TestGLTF(TestCase):
         self.assertEqual('2.0', gltf.model.asset.version)
         self.assertIsNone(gltf.model.buffers[0].uri)
         self.assertEqual(648, gltf.model.buffers[0].byteLength)
-        resources = gltf.get_glb_resources()
-        self.assertEqual(1, len(resources))
-        resource = resources[0]
+        self.assertEqual(1, len(gltf.resources))
+        self.assertEqual(1, len(gltf.glb_resources))
+        resource = gltf.resources[0]
         self.assertIsInstance(resource, GLBResource)
         self.assertEqual(648, len(resource.data))
+
+    def test_clone_no_resources(self):
+        """Basic test of the clone method for a GLTF model with no resources."""
+        # Arrange
+        gltf = GLTF(model=GLTFModel(asset=Asset(version="2.0")))
+
+        # Act
+        cloned_gltf = gltf.clone()
+
+        # Assert
+        # Original and cloned model should be distinct instances
+        self.assertIsNot(gltf, cloned_gltf)
+        # Model content should be the same
+        self.assertEqual(gltf.model, cloned_gltf.model)
+
+    def test_clone_file_resources(self):
+        """Cloning a model with file resources should clone both the model and its associated resources."""
+        # Arrange
+        data = b'sample binary data'
+        bytelen = len(data)
+        resource = FileResource('buffer.bin', data=data)
+        model = GLTFModel(asset=Asset(version='2.0'), buffers=[Buffer(uri='buffer.bin', byteLength=bytelen)])
+        gltf = GLTF(model=model, resources=[resource])
+
+        # Act
+        cloned_gltf = gltf.clone()
+
+        # Assert
+        # Original and cloned model should be distinct instances
+        self.assertIsNot(gltf, cloned_gltf)
+        # Model content should be the same
+        self.assertEqual(gltf.model, cloned_gltf.model)
+        # Resource list should be cloned
+        self.assertIsNot(gltf.resources, cloned_gltf.resources)
+        # Resource list should still contain one FileResource
+        self.assertEqual(1, len(cloned_gltf.resources))
+        cloned_file_resource = cloned_gltf.resources[0]
+        self.assertIsInstance(cloned_file_resource, FileResource)
+        # FileResource should be cloned
+        self.assertIsNot(cloned_file_resource, resource)
+        # Since the original file resource was loaded, the cloned file resource should be loaded as well
+        self.assertTrue(cloned_file_resource.loaded)
+        # Resource uri and data should be the same
+        self.assertEqual(resource.uri, cloned_file_resource.uri)
+        self.assertEqual(resource.data, cloned_file_resource.data)
+
+    def test_cloned_file_resources_remains_not_loaded_if_original_was_not_loaded(self):
+        """
+        When cloning a model with a FileResource that was not explicitly loaded, the cloned FileResource should also
+        remain not loaded.
+        """
+        # Arrange
+        # Load a glTF model with load_file_resources set to False
+        gltf = GLTF.load(sample('BoxTextured/BoxTextured.gltf'), load_file_resources=False)
+        # Resource should initially not be loaded
+        resource = gltf.get_resource('CesiumLogoFlat.png')
+        self.assertIsInstance(resource, FileResource)
+        self.assertFalse(resource.loaded)
+
+        # Act
+        cloned_gltf = gltf.clone()
+
+        # Assert
+        # Original and cloned model should be distinct instances
+        self.assertIsNot(gltf, cloned_gltf)
+        # Model content should be the same
+        self.assertEqual(gltf.model, cloned_gltf.model)
+        # Resource list should be cloned
+        self.assertIsNot(gltf.resources, cloned_gltf.resources)
+        # Resource list should contain two FileResources
+        self.assertEqual(2, len(cloned_gltf.resources))
+        cloned_file_resource = cloned_gltf.get_resource('CesiumLogoFlat.png')
+        self.assertIsInstance(cloned_file_resource, FileResource)
+        # FileResource should be cloned
+        self.assertIsNot(cloned_file_resource, resource)
+        # Since the original file resource was not loaded, the cloned file resource should also remain not loaded
+        self.assertFalse(cloned_file_resource.loaded)
+        # Cloned resource uri should be the same
+        self.assertEqual('CesiumLogoFlat.png', cloned_file_resource.uri)
+        # Resource data should be None since it was not loaded
+        self.assertIsNone(cloned_file_resource.data)
+
+    def test_clone_model_with_glb_resource(self):
+        """Cloning a model with a GLB resource should clone both the model and its associated resources."""
+        # Arrange
+        model = GLTFModel(asset=Asset(version='2.0'), buffers=[Buffer(byteLength=4)])
+        resource = GLBResource(b'data')
+        gltf = GLTF(model=model, resources=[resource])
+
+        # Act
+        cloned_gltf = gltf.clone()
+
+        # Assert
+        # Resource list should still contain one GLBResource
+        self.assertEqual(1, len(cloned_gltf.resources))
+        cloned_glb_resource = cloned_gltf.resources[0]
+        self.assertIsInstance(cloned_glb_resource, GLBResource)
+        # GLBResource should be cloned
+        self.assertIsNot(cloned_glb_resource, resource)
+        # GLBResource uri should be None
+        self.assertIsNone(cloned_glb_resource.uri)
+        # Resource data should be the same
+        self.assertEqual(resource.data, cloned_glb_resource.data)
 
     def test_export_glb(self):
         """Basic test to ensure a model can be saved in GLB format"""
@@ -231,14 +336,21 @@ class TestGLTF(TestCase):
         data = b'sample binary data'
         bytelen = len(data)
         model = GLTFModel(asset=Asset(version='2.0'), buffers=[Buffer(uri='buffer.bin', byteLength=bytelen)])
-        gltf = GLTF(model=model, resources=[FileResource(filename='buffer.bin', data=data)])
+        file_resource = FileResource(filename='buffer.bin', data=data)
+        gltf = GLTF(model=model, resources=[file_resource])
 
         # Act
         filename = path.join(TEMP_DIR, 'sample.glb')
-        gltf.export(filename)
+        gltf2 = gltf.export(filename)
 
         # Assert
-        # Read the file back in and verify expected structure
+        # Resources on the original model instance should not be mutated
+        self.assertEqual([file_resource], gltf.resources)
+        self.assertEqual(data, file_resource.data)
+        # Exported model should contain a single GLB resource
+        self.assertEqual(1, len(gltf2.resources))
+        self.assertIsInstance(gltf2.resources[0], GLBResource)
+        # Read the exported file back in and verify expected structure
         glb = GLTF.load_glb(filename)
         self.assertEqual(model.asset, glb.model.asset)
         self.assertEqual(1, len(glb.model.buffers))
@@ -248,12 +360,16 @@ class TestGLTF(TestCase):
         self.assertIsNone(buffer.uri)
         # Binary data should be padded to a multiple of 4
         self.assertEqual(20, buffer.byteLength)
+        # Original model instance should retain its buffer with the original uri
+        self.assertEqual([Buffer(uri='buffer.bin', byteLength=bytelen)], gltf.model.buffers)
         # Ensure embedded GLB resource was parsed correctly
         self.assertEqual(1, len(glb.resources))
         resource = glb.get_glb_resource()
         self.assertIsInstance(resource, GLBResource)
         # Binary data should be null-padded so its length is a multiple of 4 bytes
         self.assertEqual(b'sample binary data\x00\x00', resource.data)
+        # Original resource data should not be mutated
+        self.assertEqual(b'sample binary data', file_resource.data)
 
     def test_export_glb_multiple_buffers(self):
         """
@@ -266,6 +382,8 @@ class TestGLTF(TestCase):
         bytelen1 = len(data1)
         data2 = b'some more binary data'
         bytelen2 = len(data2)
+        file_resource_1 = FileResource(filename='buffer1.bin', data=data1)
+        file_resource_2 = FileResource(filename='buffer2.bin', data=data2)
         model = GLTFModel(
             asset=Asset(version='2.0'),
             buffers=[
@@ -279,15 +397,22 @@ class TestGLTF(TestCase):
             ]
         )
         gltf = GLTF(model=model, resources=[
-            FileResource(filename='buffer1.bin', data=data1),
-            FileResource(filename='buffer2.bin', data=data2)
+            file_resource_1,
+            file_resource_2
         ])
 
         # Act
         filename = path.join(TEMP_DIR, 'sample2.glb')
-        gltf.export(filename)
+        gltf2 = gltf.export(filename)
 
         # Assert
+        # Resources on the original model instance should not be mutated
+        self.assertEqual([file_resource_1, file_resource_2], gltf.resources)
+        self.assertEqual(data1, file_resource_1.data)
+        self.assertEqual(data2, file_resource_2.data)
+        # The exported model should contain a single GLB resource
+        self.assertEqual(1, len(gltf2.resources))
+        self.assertIsInstance(gltf2.resources[0], GLBResource)
         # Read the file back in and verify expected structure
         glb = GLTF.load_glb(filename)
         self.assertEqual(model.asset, glb.model.asset)
@@ -296,6 +421,16 @@ class TestGLTF(TestCase):
         # Buffer URI should be undefined since the data is now embedded
         buffer = glb.model.buffers[0]
         self.assertIsNone(buffer.uri)
+        # Original model instance should retain its original buffers and buffer views
+        self.assertEqual([
+            Buffer(uri='buffer1.bin', byteLength=bytelen1),
+            Buffer(uri='buffer2.bin', byteLength=bytelen2)
+        ], gltf.model.buffers)
+        self.assertEqual([
+            BufferView(buffer=0, byteOffset=0, byteLength=10),
+            BufferView(buffer=0, byteOffset=10, byteLength=8),
+            BufferView(buffer=1, byteOffset=0, byteLength=21)
+        ], gltf.model.bufferViews)
         # Ensure embedded GLB resource was parsed correctly
         self.assertEqual(1, len(glb.resources))
         resource = glb.get_glb_resource()
@@ -371,6 +506,10 @@ class TestGLTF(TestCase):
         image_filename = 'image.png'
         image_data = b'sample image data'
         image_bytelen = len(image_data)
+        # File Resources
+        file_resource_1 = FileResource(filename=buffer_1_filename, data=buffer_1_data)
+        file_resource_2 = FileResource(filename=buffer_2_filename, data=buffer_2_data)
+        file_resource_3 = FileResource(filename=image_filename, data=image_data, mimetype='image/jpeg')
         # Create GLTF Model
         model = GLTFModel(asset=Asset(version='2.0'),
                           buffers=[
@@ -385,16 +524,24 @@ class TestGLTF(TestCase):
                           ],
                           images=[Image(uri=image_filename)])
         gltf = GLTF(model=model, resources=[
-            FileResource(filename=buffer_1_filename, data=buffer_1_data),
-            FileResource(filename=buffer_2_filename, data=buffer_2_data),
-            FileResource(filename=image_filename, data=image_data, mimetype='image/jpeg')
+            file_resource_1,
+            file_resource_2,
+            file_resource_3
         ])
 
         # Act
         filename = path.join(TEMP_DIR, 'sample4.glb')
-        gltf.export(filename)
+        gltf2 = gltf.export(filename)
 
         # Assert
+        # Resources on the original model instance should not be mutated
+        self.assertEqual([file_resource_1, file_resource_2, file_resource_3], gltf.resources)
+        self.assertEqual(buffer_1_data, file_resource_1.data)
+        self.assertEqual(buffer_2_data, file_resource_2.data)
+        self.assertEqual(image_data, file_resource_3.data)
+        # The exported model should contain a single GLB resource
+        self.assertEqual(1, len(gltf2.resources))
+        self.assertIsInstance(gltf2.resources[0], GLBResource)
         # Read the file back in and verify expected structure
         glb = GLTF.load_glb(filename)
         self.assertEqual(model.asset, glb.model.asset)
@@ -403,6 +550,18 @@ class TestGLTF(TestCase):
         self.assertIsInstance(buffer, Buffer)
         # Buffer URI should be undefined since the data is now embedded
         self.assertIsNone(buffer.uri)
+        # Original model instance should retain its original buffers, buffer views, and images
+        self.assertEqual([
+            Buffer(uri=buffer_1_filename, byteLength=buffer_1_bytelen),
+            Buffer(uri=buffer_2_filename, byteLength=buffer_2_bytelen)
+        ], gltf.model.buffers)
+        self.assertEqual([
+            BufferView(buffer=0, byteOffset=0, byteLength=10),
+            BufferView(buffer=0, byteOffset=10, byteLength=12),
+            BufferView(buffer=1, byteOffset=0, byteLength=10),
+            BufferView(buffer=1, byteOffset=10, byteLength=12)
+        ], gltf.model.bufferViews)
+        self.assertEqual([Image(uri=image_filename)], gltf.model.images)
         # Ensure embedded GLB resource was parsed correctly
         self.assertEqual(1, len(glb.resources))
         resource = glb.get_glb_resource()
@@ -680,13 +839,13 @@ class TestGLTF(TestCase):
 
     def test_export_glb_with_resource_not_yet_loaded(self):
         """
-        When converting a glTF with external file resources that were not explicitly loaded when calling GLTF.load(),
-        the resources should get automatically loaded when exporting to GLB.
+        Embedding resources should work when converting a glTF with external file resources that were not explicitly
+        loaded when calling GLTF.load(). (This implies the resource will need to be implicitly loaded.)
         """
         # Arrange
         # Load a glTF model with load_file_resources set to False
         gltf = GLTF.load(sample('BoxTextured/BoxTextured.gltf'), load_file_resources=False)
-        # Resource should initially not be loaded
+        # Ensure resource is initially not loaded
         resource = gltf.get_resource('CesiumLogoFlat.png')
         self.assertIsInstance(resource, FileResource)
         self.assertFalse(resource.loaded)
@@ -694,11 +853,19 @@ class TestGLTF(TestCase):
         # Act
         # Convert the glTF to a GLB
         filename = path.join(TEMP_DIR, 'sample9.glb')
-        gltf.export(filename)
+        exported_glb = gltf.export(filename)
 
         # Assert
-        # Ensure resource got loaded
-        self.assertTrue(resource.loaded)
+        # Extract the image data from the exported GLB
+        glb_resource = exported_glb.get_glb_resource()
+        image = exported_glb.model.images[0]
+        image_buffer_view = exported_glb.model.bufferViews[image.bufferView]
+        offset = image_buffer_view.byteOffset
+        bytelen = image_buffer_view.byteLength
+        extracted_image_data = glb_resource.data[offset:(offset+bytelen)]
+        # Ensure image data matches
+        resource.load()
+        self.assertEqual(resource.data, extracted_image_data)
 
     def test_export_glb_with_resource_not_yet_loaded_without_embedding(self):
         """
@@ -718,11 +885,14 @@ class TestGLTF(TestCase):
         # Convert the glTF to a GLB without embedding the resource. However, set save_file_resources to True, so
         # the image should still get loaded and saved.
         filename = path.join(TEMP_DIR, 'sample10.glb')
-        gltf.export_glb(filename, embed_image_resources=False, save_file_resources=True)
+        exported_glb = gltf.export_glb(filename, embed_image_resources=False, save_file_resources=True)
 
         # Assert
-        # Ensure resource is now loaded
-        self.assertTrue(resource.loaded)
+        # Original image resource should not be loaded
+        self.assertFalse(resource.loaded)
+        # Exported image resource should be loaded
+        exported_resource = exported_glb.get_resource('CesiumLogoFlat.png')
+        self.assertTrue(exported_resource.loaded)
         # Ensure image got saved
         image_filename = path.join(TEMP_DIR, 'CesiumLogoFlat.png')
         self.assertTrue(path.exists(image_filename))
@@ -769,12 +939,55 @@ class TestGLTF(TestCase):
         with self.assertRaises(TypeError):
             gltf.export(filename)
 
+    def test_export_glb_with_multiple_glb_resources(self):
+        """Test exporting a GLB with multiple GLB resources with different types."""
+        # Arrange
+        model = GLTFModel(asset=Asset(version='2.0'), buffers=[Buffer(byteLength=4)])
+        glb_resource_1 = GLBResource(b'data')
+        glb_resource_2 = GLBResource(b'more data', resource_type=123)
+        gltf = GLTF(model=model, resources=[glb_resource_1, glb_resource_2])
+
+        # Act
+        filename = path.join(TEMP_DIR, 'sample13.glb')
+        gltf2 = gltf.export(filename)
+
+        # Assert
+        # Exported model should have two GLB resources
+        self.assertEqual(2, len(gltf2.resources))
+        exported_glb_resource_1 = gltf2.resources[0]
+        exported_glb_resource_2 = gltf2.resources[1]
+        self.assertIsInstance(exported_glb_resource_1, GLBResource)
+        self.assertIsInstance(exported_glb_resource_2, GLBResource)
+        # Chunk types of both resources should be retained
+        self.assertEqual(GLB_BINARY_CHUNK_TYPE, exported_glb_resource_1.resource_type)
+        self.assertEqual(123, exported_glb_resource_2.resource_type)
+
+    def test_load_glb_with_multiple_glb_resources(self):
+        """Test loading a GLB with multiple GLB resources with different types."""
+        # Act
+        gltf = GLTF.load(sample('MultipleChunks/MultipleChunks.glb'))
+
+        # Assert
+        # Model should have two GLB resources
+        self.assertEqual(2, len(gltf.resources))
+        self.assertEqual(2, len(gltf.glb_resources))
+        self.assertEqual(gltf.resources, gltf.glb_resources)
+        # Extract the resources and ensure they are the correct type
+        glb_resource_1 = gltf.resources[0]
+        glb_resource_2 = gltf.resources[1]
+        self.assertIsInstance(glb_resource_1, GLBResource)
+        self.assertIsInstance(glb_resource_2, GLBResource)
+        # Validate chunk types
+        self.assertEqual(GLB_BINARY_CHUNK_TYPE, glb_resource_1.resource_type)
+        self.assertEqual(123, glb_resource_2.resource_type)
+        # Validate chunk data
+        self.assertEqual(b'data', glb_resource_1.data)
+        self.assertEqual(b'more data\x00\x00\x00', glb_resource_2.data)
+
 
 # TODO:
-#  - Test embedding file resources that are not yet loaded
 #  - Test data URIs getting converted to embedded GLB resources
 #  - Images can refer to a buffer view. Ensure these are merged properly when converting to GLB.
-#  - Test handling multiple binary chunks in a GLB with different chunk types when loading and exporting
 #  - Test saving a GLB that already has a GLB resource present (need to re-merge)
 #  - Test auto-determining MIME type when embedding an image
 #  - Ensure this requirement from the spec is met when embedding data:

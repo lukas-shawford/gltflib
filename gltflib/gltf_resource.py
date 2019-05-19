@@ -1,7 +1,8 @@
 import struct
 import magic
+import copy
 from os import path
-from abc import ABC
+from abc import ABC, abstractmethod
 from typing import Optional
 
 
@@ -26,6 +27,10 @@ class GLTFResource(ABC):
     def data(self):
         return self._data
 
+    @abstractmethod
+    def clone(self) -> 'GLTFResource':
+        pass
+
 
 class FileResource(GLTFResource):
     """
@@ -33,6 +38,7 @@ class FileResource(GLTFResource):
     disk. When loading a GLTF model with load_file_resources set to True, any URIs that refer to a file will be imported
     as file resources.
     """
+
     def __init__(self, filename: str = None, basepath: str = None, autoload=False, data: bytes = None,
                  mimetype: str = None):
         super(FileResource, self).__init__(filename, data)
@@ -76,6 +82,9 @@ class FileResource(GLTFResource):
         with open(filename, 'wb') as f:
             f.write(self._data)
 
+    def clone(self) -> 'FileResource':
+        return FileResource(self.filename, self._basepath, False, self._data, self._mimetype)
+
 
 class ExternalResource(GLTFResource):
     """
@@ -92,6 +101,9 @@ class ExternalResource(GLTFResource):
     def data(self):
         raise ValueError("Data is not accessible for an external GLTF resource")
 
+    def clone(self) -> 'ExternalResource':
+        return ExternalResource(self.uri)
+
 
 class GLBResource(GLTFResource):
     """
@@ -104,3 +116,6 @@ class GLBResource(GLTFResource):
     @property
     def resource_type(self):
         return self._resource_type
+
+    def clone(self) -> 'GLBResource':
+        return GLBResource(self.data, self._resource_type)
