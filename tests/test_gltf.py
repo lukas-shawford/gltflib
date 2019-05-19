@@ -1093,6 +1093,8 @@ class TestGLTF(TestCase):
         # Ensure image data matches
         resource.load()
         self.assertEqual(resource.data, extracted_image_data)
+        # MIME type should be automatically determined when loading the image
+        self.assertEqual('image/png', image.mimeType)
 
     def test_export_glb_with_resource_not_yet_loaded_without_embedding(self):
         """
@@ -1214,6 +1216,3 @@ class TestGLTF(TestCase):
 
 # TODO:
 #  - Add support for Base64Resource
-#  - Test data URIs getting converted to embedded GLB resources
-#  - Test auto-determining MIME type when embedding an image
-#  - Test exporting model with multiple GLBResource - should throw if both GLBResource have the same resource type
