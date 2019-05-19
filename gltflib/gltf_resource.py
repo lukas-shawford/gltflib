@@ -27,6 +27,10 @@ class GLTFResource(ABC):
     def data(self):
         return self._data
 
+    @data.setter
+    def data(self, data):
+        self._data = data
+
     @abstractmethod
     def clone(self) -> 'GLTFResource':
         pass

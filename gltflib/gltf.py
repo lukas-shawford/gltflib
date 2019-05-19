@@ -164,6 +164,59 @@ class GLTF:
         if resource is not None:
             self.resources.remove(resource)
 
+    def embed_resource(self, resource: GLTFResource) -> GLBResource:
+        """
+        Embeds a given resource, converting it to a GLBResource. If the model already contains a GLBResource, then the
+        resource data will be appended to the existing GLBResource. Any buffers and buffer views that refer to the
+        original resource will be modified to point to the embedded GLBResource instead.
+        :param resource: Resource to embed. This may be a FileResource or a Base64Resource (or a GLBResource, in which
+            case it will simply be returned since it is already embedded). Note that embedding resources of type
+            ExternalResource will result in an error since loading external resource data is not supported.
+        :return: GLBResource
+        """
+        if resource not in (self.resources or []):
+            raise ValueError("Resource to embed must be present in the resources list")
+        glb_resource = self.get_glb_resource()
+        if resource is glb_resource:
+            return glb_resource
+        if isinstance(resource, ExternalResource):
+            raise TypeError("Embedding an ExternalResource is not supported")
+        if isinstance(resource, FileResource):
+            if not resource.loaded:
+                resource.load()
+            data = bytearray(resource.data)
+            glb_resource, offset, bytelen = self._create_or_extend_glb_resource(data)
+            self.resources.remove(resource)
+            self._update_model_after_embedding_resource(resource.uri, offset, bytelen)
+        # TODO: Handle Base64Resources
+        return glb_resource
+
+    def _update_model_after_embedding_resource(self, uri: str, offset: int, bytelen: int):
+        if self.model.buffers is not None:
+            enumerated_buffers = list(enumerate(self.model.buffers))
+            for i, buffer in enumerated_buffers:
+                if buffer.uri == uri:
+                    # Remove the buffer since it is now embedded
+                    self.model.buffers.remove(buffer)
+                    # Update any buffers views that point to this buffer
+                    self._update_buffer_views_after_embedding_resource(i, offset)
+                    # Decrement the buffer index on any buffer views that come after the removed buffer
+                    if self.model.bufferViews is not None:
+                        for buffer_view in self.model.bufferViews:
+                            if buffer_view.buffer > i:
+                                buffer_view.buffer -= 1
+        if self.model.images is not None:
+            for i, image in enumerate(self.model.images):
+                if image.uri == uri:
+                    image.bufferView = self._create_embedded_image_buffer_view(offset, bytelen)
+
+    def _update_buffer_views_after_embedding_resource(self, buffer_index: int, offset: int):
+        if self.model.bufferViews is not None:
+            for buffer_view in self.model.bufferViews:
+                if buffer_view.buffer == buffer_index:
+                    buffer_view.buffer = 0
+                    buffer_view.byteOffset += offset
+
     def _export_gltf(self, filename: str, save_file_resources=True) -> None:
         if any(isinstance(resource, GLBResource) for resource in (self.resources or [])):
             raise TypeError("Model may not contain resources of type GLBResource when exporting to GLTF. "
@@ -320,6 +373,7 @@ class GLTF:
             keep_buffers = []
             for i, buffer in enumerate(self.model.buffers):
                 if buffer.uri is None:
+                    # Already embedded
                     keep_buffers.append(buffer)
                     continue
                 resource = self.get_resource(buffer.uri)
@@ -385,21 +439,29 @@ class GLTF:
         self.model.buffers.insert(0, buffer)
         return buffer
 
-    def _create_or_extend_glb_resource(self, data: bytearray):
+    def _create_or_extend_glb_resource(self, data: bytearray) -> (GLBResource, int, int):
+        bytelen = len(data)
         glb_resource = self.get_glb_resource()
         if glb_resource is None:
+            offset = 0
+            buffer_bytelen = bytelen
+            padbytes(data, 4)
             glb_resource = GLBResource(data)
             self.resources.append(glb_resource)
         else:
+            # Pad the data in the existing GLBResource to a multiple of 4 bytes
+            existing_data = bytearray(glb_resource.data)
+            offset = padbytes(existing_data, 4)
             # Merge new data with the data we already have in the existing GLBResource
-            data[0:0] = glb_resource.data
-            # Remove the old GLB resource
-            self.resources.remove(glb_resource)
-            # Create a new GLBResource with the merged data and add it to the resources list
-            glb_resource = GLBResource(data)
-            self.resources.insert(0, glb_resource)
+            data[0:0] = existing_data
+            # Re-pad the merged byte array
+            buffer_bytelen = padbytes(data, 4)
+            # Update the data on the existing GLBResource
+            glb_resource.data = bytes(data)
         buffer = self._get_or_create_glb_buffer()
-        buffer.byteLength = len(data)
+        buffer.byteLength = buffer_bytelen
+        # Return the GLBResource, as well as the offset and bytelength of the inserted data
+        return glb_resource, offset, bytelen
 
     def _embed_buffer_views(self, buffer_index, glb_offset):
         if self.model.bufferViews is not None:

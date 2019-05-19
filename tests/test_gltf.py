@@ -163,7 +163,7 @@ class TestGLTF(TestCase):
         with open(resource_filename, 'rb') as f:
             self.assertEqual(data, f.read())
 
-    def test_export_file_resources_skip(self):
+    def test_skip_exporting_file_resources(self):
         """
         Ensure external file resources are skipped when exporting a GLTF model with save_file_resources set to False
         """
@@ -329,6 +329,159 @@ class TestGLTF(TestCase):
         self.assertIsNone(cloned_glb_resource.uri)
         # Resource data should be the same
         self.assertEqual(resource.data, cloned_glb_resource.data)
+
+    def test_embed_file_resource(self):
+        """Test embedding a file resource"""
+        # Arrange
+        data = b'sample binary data'
+        bytelen = len(data)
+        model = GLTFModel(
+            asset=Asset(version='2.0'),
+            buffers=[Buffer(uri='buffer.bin', byteLength=bytelen)],
+            bufferViews=[BufferView(buffer=0, byteOffset=0, byteLength=18)]
+        )
+        file_resource = FileResource(filename='buffer.bin', data=data)
+        gltf = GLTF(model=model, resources=[file_resource])
+
+        # Act
+        glb_resource = gltf.embed_resource(file_resource)
+
+        # Assert
+        # Model should now contain a single GLB resource
+        self.assertEqual([glb_resource], gltf.resources)
+        # Resource data should be null-padded to a multiple of 4 bytes
+        self.assertEqual(b'sample binary data\x00\x00', glb_resource.data)
+        # Original file resource should not be mutated
+        self.assertEqual(b'sample binary data', file_resource.data)
+        # Buffer URI should now be undefined since it is embedded
+        self.assertEqual([Buffer(byteLength=bytelen)], model.buffers)
+        # Buffer view should not be modified in this case
+        self.assertEqual([BufferView(buffer=0, byteOffset=0, byteLength=18)], model.bufferViews)
+
+    def test_embed_glb_resource_does_nothing(self):
+        """Ensure that calling embed_resource on a GLBResource does nothing (since it is already embedded)"""
+        # Arrange
+        model = GLTFModel(asset=Asset(version='2.0'), buffers=[Buffer(byteLength=4)])
+        resource = GLBResource(b'data')
+        gltf = GLTF(model=model, resources=[resource])
+
+        # Act
+        glb_resource = gltf.embed_resource(resource)
+
+        # Assert
+        self.assertIs(glb_resource, resource)
+        self.assertEqual([Buffer(byteLength=4)], model.buffers)
+
+    def test_embed_file_resource_with_existing_glb_resources(self):
+        """Ensure that embedding a file resource works correctly when the model already has existing GLB resources."""
+        # Arrange
+        # Existing GLB resource
+        glb_resource_data = b'some data'
+        glb_resource_bytelen = len(glb_resource_data)
+        glb_resource = GLBResource(glb_resource_data)
+        # Another GLB resource with a custom resource type
+        custom_glb_resource_data = b'more data'
+        custom_glb_resource = GLBResource(custom_glb_resource_data, resource_type=123)
+        # Sample buffer 1 data (to be embedded)
+        buffer_1_filename = 'buffer_1.bin'
+        buffer_1_data = b'sample buffer one data'
+        buffer_1_bytelen = len(buffer_1_data)
+        # Sample buffer 2 data (to remain external)
+        buffer_2_filename = 'buffer_2.bin'
+        buffer_2_data = b'sample buffer two data'
+        buffer_2_bytelen = len(buffer_2_data)
+        # Sample image data (to be embedded)
+        image_filename = 'image.png'
+        image_data = b'sample image data'
+        image_bytelen = len(image_data)
+        # File Resources
+        file_resource_1 = FileResource(filename=buffer_1_filename, data=buffer_1_data)
+        file_resource_2 = FileResource(filename=buffer_2_filename, data=buffer_2_data)
+        file_resource_3 = FileResource(filename=image_filename, data=image_data, mimetype='image/jpeg')
+        # Create GLTF Model
+        model = GLTFModel(asset=Asset(version='2.0'),
+                          buffers=[
+                              Buffer(byteLength=glb_resource_bytelen),
+                              Buffer(uri=buffer_1_filename, byteLength=buffer_1_bytelen),
+                              Buffer(uri=buffer_2_filename, byteLength=buffer_2_bytelen)
+                          ],
+                          bufferViews=[
+                              BufferView(buffer=0, byteOffset=0, byteLength=5),
+                              BufferView(buffer=0, byteOffset=5, byteLength=4),
+                              BufferView(buffer=1, byteOffset=0, byteLength=10),
+                              BufferView(buffer=1, byteOffset=10, byteLength=12),
+                              BufferView(buffer=2, byteOffset=0, byteLength=10),
+                              BufferView(buffer=2, byteOffset=10, byteLength=12)
+                          ],
+                          images=[Image(uri=image_filename)])
+        gltf = GLTF(model=model, resources=[
+            glb_resource,
+            custom_glb_resource,
+            file_resource_1,
+            file_resource_2,
+            file_resource_3
+        ])
+
+        # Act
+        gltf.embed_resource(file_resource_1)
+        gltf.embed_resource(file_resource_3)
+
+        # Assert
+        # There should now be 3 resources total (existing GLB resource, the custom GLB resource, and file_resource_2
+        # which was not embedded)
+        self.assertEqual(3, len(gltf.resources))
+        # Ensure the existing GLB resource is still present
+        self.assertIs(glb_resource, gltf.get_glb_resource())
+        # Existing GLB resource should have its original data together with the data from file_resource_1 and
+        # file_resource_3 (each block null-padded to 4 byte intervals).
+        self.assertEqual(b'some data\x00\x00\x00sample buffer one data\x00\x00sample image data\x00\x00\x00',
+                         glb_resource.data)
+        # The custom GLB resource should still be present and not mutated in any way
+        self.assertIs(custom_glb_resource, gltf.get_glb_resource(123))
+        self.assertEqual(b'more data', custom_glb_resource.data)
+        # file_resource_2 should remain external with its data intact
+        self.assertIs(file_resource_2, gltf.get_resource(buffer_2_filename))
+        self.assertEqual(b'sample buffer two data', file_resource_2.data)
+        # First buffer (referring to the embedded GLB buffer) should be expanded, and its URI should remain undefined
+        self.assertIsNone(model.buffers[0].uri)
+        self.assertEqual(56, model.buffers[0].byteLength)
+        # Second buffer should remain in the model and have its original data intact since it was not embedded
+        self.assertEqual(Buffer(uri=buffer_2_filename, byteLength=buffer_2_bytelen), model.buffers[1])
+        # There should be two buffers total
+        self.assertEqual(2, len(model.buffers))
+        # Ensure buffer view contents match what is expected. The offsets and byte lengths are adjusted to point to the
+        # embedded data. There should be a new buffer view for the embedded image
+        self.assertEqual([
+            BufferView(buffer=0, byteOffset=0, byteLength=5),
+            BufferView(buffer=0, byteOffset=5, byteLength=4),
+            BufferView(buffer=0, byteOffset=12, byteLength=10),
+            BufferView(buffer=0, byteOffset=22, byteLength=12),
+            BufferView(buffer=1, byteOffset=0, byteLength=10),
+            BufferView(buffer=1, byteOffset=10, byteLength=12),
+            BufferView(buffer=0, byteOffset=36, byteLength=image_bytelen)
+        ], model.bufferViews)
+        # Embedded image should now point to a buffer view instead
+        self.assertEqual([Image(uri=image_filename, bufferView=6)], model.images)
+
+    def test_embed_missing_resource_raises_error(self):
+        """Attempting to embed a resource that is not present in the resources list should raise a ValueError"""
+        # Arrange
+        file_resource = FileResource(filename='buffer.bin', data=b'sample binary data')
+        gltf = GLTF(model=GLTFModel(asset=Asset(version='2.0')))
+
+        # Act/Assert
+        with self.assertRaises(ValueError):
+            gltf.embed_resource(file_resource)
+
+    def test_embed_external_resource_raises_error(self):
+        """Attempting to embed an ExternalResource should raise a ValueError (not yet supported)"""
+        # Arrange
+        resource = ExternalResource(uri='http://www.example.com/')
+        gltf = GLTF(model=GLTFModel(asset=Asset(version='2.0')), resources=[resource])
+
+        # Act/Assert
+        with self.assertRaises(TypeError):
+            gltf.embed_resource(resource)
 
     def test_export_glb(self):
         """Basic test to ensure a model can be saved in GLB format"""
@@ -986,6 +1139,7 @@ class TestGLTF(TestCase):
 
 
 # TODO:
+#  - Add support for Base64Resource
 #  - Test data URIs getting converted to embedded GLB resources
 #  - Images can refer to a buffer view. Ensure these are merged properly when converting to GLB.
 #  - Test saving a GLB that already has a GLB resource present (need to re-merge)
@@ -994,3 +1148,4 @@ class TestGLTF(TestCase):
 #    The offset of an accessor into a bufferView (i.e., accessor.byteOffset) and the offset of an accessor into a buffer
 #    (i.e., accessor.byteOffset + bufferView.byteOffset) must be a multiple of the size of the accessor's component
 #    type.
+#  - Test exporting model with multiple GLBResource - should throw if both GLBResource have the same resource type
