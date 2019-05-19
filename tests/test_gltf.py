@@ -35,20 +35,31 @@ class TestGLTF(TestCase):
 
     def test_load(self):
         """Basic test ensuring the class can successfully load a minimal GLTF 2.0 file."""
+        # Act
         gltf = GLTF.load(sample('Minimal/minimal.gltf'))
+
+        # Assert
         self.assertIsInstance(gltf, GLTF)
         self.assertEqual(GLTFModel(asset=Asset(version="2.0")), gltf.model)
 
     def test_export(self):
         """Basic test ensuring the class can successfully save a minimal GLTF 2.0 file."""
+        # Arrange
         gltf = GLTF(model=GLTFModel(asset=Asset(version="2.0")))
         filename = path.join(TEMP_DIR, 'minimal.gltf')
+
+        # Act
         gltf.export(filename)
+
+        # Assert
         self.assert_gltf_files_equal(sample('Minimal/minimal.gltf'), filename)
 
     def test_load_file_resource(self):
         """External files referenced in a glTF model should be loaded as FileResource"""
+        # Act
         gltf = GLTF.load(sample('TriangleWithoutIndices/TriangleWithoutIndices.gltf'))
+
+        # Assert
         self.assertIsInstance(gltf.resources, list)
         resource = gltf.get_resource('triangleWithoutIndices.bin')
         self.assertIsInstance(resource, FileResource)
@@ -56,16 +67,22 @@ class TestGLTF(TestCase):
 
     def test_load_file_resource_no_autoload(self):
         """File resource contents should not be autoloaded by default"""
+        # Act
         gltf = GLTF.load(sample('TriangleWithoutIndices/TriangleWithoutIndices.gltf'))
         resource = gltf.get_resource('triangleWithoutIndices.bin')
+
+        # Assert
         self.assertIsInstance(resource, FileResource)
         self.assertFalse(resource.loaded)
         self.assertIsNone(resource.data)
 
     def test_load_file_resource_with_autoload(self):
         """When load_file_resources is true, file resource contents should be autoloaded"""
+        # Act
         gltf = GLTF.load(sample('TriangleWithoutIndices/TriangleWithoutIndices.gltf'), load_file_resources=True)
         resource = gltf.get_resource('triangleWithoutIndices.bin')
+
+        # Assert
         self.assertIsInstance(resource, FileResource)
         self.assertTrue(resource.loaded)
         with open(sample('TriangleWithoutIndices/triangleWithoutIndices.bin'), 'rb') as f:
@@ -74,8 +91,11 @@ class TestGLTF(TestCase):
 
     def test_load_image_resources(self):
         """Ensure image resources are loaded"""
+        # Act
         gltf = GLTF.load(sample('BoxTextured/BoxTextured.gltf'), load_file_resources=True)
         texture = gltf.get_resource('CesiumLogoFlat.png')
+
+        # Assert
         self.assertIsInstance(texture, FileResource)
         with open(sample('BoxTextured/CesiumLogoFlat.png'), 'rb') as f:
             texture_data = f.read()
@@ -83,14 +103,20 @@ class TestGLTF(TestCase):
 
     def test_load_embedded_resources(self):
         """Embedded resources should not be parsed (for now?)"""
+        # Act
         gltf = GLTF.load(sample('BoxTexturedEmbedded/BoxTextured.gltf'))
+
+        # Assert
         self.assertEqual(0, len(gltf.resources))
 
     def test_load_external_resources(self):
         """External resources should be parsed as ExternalResource instances, but otherwise ignored (for now)"""
+        # Act
         gltf = GLTF.load(sample('BoxTexturedExternal/BoxTextured.gltf'))
         uri = 'https://www.example.com'
         resource = gltf.get_resource(uri)
+
+        # Assert
         self.assertIsInstance(resource, ExternalResource)
         self.assertEqual(uri, resource.uri)
         # For now, attempting to access the resource data should throw a ValueError
@@ -102,10 +128,15 @@ class TestGLTF(TestCase):
         Resources that are passed in to the load method should be used if provided (rather than attempting to load
         these resources from the filesystem).
         """
+        # Arrange
         data = b'sample binary data'
         resource = FileResource('triangleWithoutIndices.bin', data=data)
+
+        # Act
         gltf = GLTF.load(sample('TriangleWithoutIndices/TriangleWithoutIndices.gltf'), resources=[resource])
         loaded_resource = gltf.get_resource('triangleWithoutIndices.bin')
+
+        # Assert
         self.assertIs(loaded_resource, resource)
         self.assertEqual(data, loaded_resource.data)
         self.assertIsInstance(loaded_resource, FileResource)
@@ -113,13 +144,18 @@ class TestGLTF(TestCase):
 
     def test_export_file_resources(self):
         """Test exporting a GLTF model with external file resources"""
+        # Arrange
         data = b'sample binary data'
         bytelen = len(data)
         resource = FileResource('buffer.bin', data=data)
         model = GLTFModel(asset=Asset(version='2.0'), buffers=[Buffer(uri='buffer.bin', byteLength=bytelen)])
         gltf = GLTF(model=model, resources=[resource])
         filename = path.join(TEMP_DIR, 'sample.gltf')
+
+        # Act
         gltf.export(filename, save_file_resources=True)
+
+        # Assert
         resource_filename = path.join(TEMP_DIR, 'buffer.bin')
         self.assertTrue(path.exists(resource_filename))
         with open(resource_filename, 'rb') as f:
@@ -129,6 +165,7 @@ class TestGLTF(TestCase):
         """
         Ensure external file resources are skipped when exporting a GLTF model with save_file_resources set to False
         """
+        # Arrange
         resource_filename = path.join(TEMP_DIR, 'buffer.bin')
         if path.exists(resource_filename):
             os.remove(resource_filename)
@@ -138,7 +175,11 @@ class TestGLTF(TestCase):
         model = GLTFModel(asset=Asset(version='2.0'), buffers=[Buffer(uri='buffer.bin', byteLength=bytelen)])
         gltf = GLTF(model=model, resources=[resource])
         filename = path.join(TEMP_DIR, 'sample.gltf')
+
+        # Act
         gltf.export(filename, save_file_resources=False)
+
+        # Assert
         self.assertFalse(path.exists(resource_filename))
 
     def test_validate_file_resources_in_buffer_when_exporting(self):
@@ -146,9 +187,12 @@ class TestGLTF(TestCase):
         Test validation for missing external resources referenced in the buffers array when exporting with
         save_file_resources set to True
         """
+        # Arrange
         model = GLTFModel(asset=Asset(version='2.0'), buffers=[Buffer(uri='buffer.bin', byteLength=1024)])
         gltf = GLTF(model=model)
         filename = path.join(TEMP_DIR, 'sample.gltf')
+
+        # Act/Assert
         with self.assertRaisesRegex(RuntimeError, 'Missing resource'):
             gltf.export(filename, save_file_resources=True)
 
@@ -157,15 +201,21 @@ class TestGLTF(TestCase):
         Test validation for missing external resources referenced in the images array when exporting with
         save_file_resources set to True
         """
+        # Arrange
         model = GLTFModel(asset=Asset(version='2.0'), images=[Image(uri='buffer.bin')])
         gltf = GLTF(model=model)
         filename = path.join(TEMP_DIR, 'sample.gltf')
+
+        # Act/Assert
         with self.assertRaisesRegex(RuntimeError, 'Missing resource'):
             gltf.export(filename, save_file_resources=True)
 
     def test_load_glb(self):
         """Ensure a model can be loaded from a binary glTF (GLB) file"""
+        # Act
         gltf = GLTF.load(sample('Box/glb/Box.glb'))
+
+        # Assert
         self.assertEqual('2.0', gltf.model.asset.version)
         self.assertIsNone(gltf.model.buffers[0].uri)
         self.assertEqual(648, gltf.model.buffers[0].byteLength)
@@ -177,12 +227,17 @@ class TestGLTF(TestCase):
 
     def test_export_glb(self):
         """Basic test to ensure a model can be saved in GLB format"""
+        # Arrange
         data = b'sample binary data'
         bytelen = len(data)
         model = GLTFModel(asset=Asset(version='2.0'), buffers=[Buffer(uri='buffer.bin', byteLength=bytelen)])
         gltf = GLTF(model=model, resources=[FileResource(filename='buffer.bin', data=data)])
+
+        # Act
         filename = path.join(TEMP_DIR, 'sample.glb')
         gltf.export(filename)
+
+        # Assert
         # Read the file back in and verify expected structure
         glb = GLTF.load_glb(filename)
         self.assertEqual(model.asset, glb.model.asset)
@@ -206,6 +261,7 @@ class TestGLTF(TestCase):
         merged into a single buffer, and all buffer views that reference the buffer should have their byte offsets
         adjusted.
         """
+        # Arrange
         data1 = b'sample binary data'
         bytelen1 = len(data1)
         data2 = b'some more binary data'
@@ -226,8 +282,12 @@ class TestGLTF(TestCase):
             FileResource(filename='buffer1.bin', data=data1),
             FileResource(filename='buffer2.bin', data=data2)
         ])
+
+        # Act
         filename = path.join(TEMP_DIR, 'sample2.glb')
         gltf.export(filename)
+
+        # Assert
         # Read the file back in and verify expected structure
         glb = GLTF.load_glb(filename)
         self.assertEqual(model.asset, glb.model.asset)
@@ -251,13 +311,18 @@ class TestGLTF(TestCase):
 
     def test_export_glb_embed_image(self):
         """Tests embedding an image into the GLB that was previously an external file reference"""
+        # Arrange
         data = b'sample image data'
         bytelen = len(data)
         image_filename = 'image.png'
         model = GLTFModel(asset=Asset(version='2.0'), images=[Image(uri=image_filename)])
         gltf = GLTF(model=model, resources=[FileResource(filename=image_filename, data=data, mimetype='image/jpeg')])
+
+        # Act
         filename = path.join(TEMP_DIR, 'sample3.glb')
         gltf.export(filename)
+
+        # Assert
         # Read the file back in and verify expected structure
         glb = GLTF.load_glb(filename)
         self.assertEqual(model.asset, glb.model.asset)
@@ -293,6 +358,7 @@ class TestGLTF(TestCase):
 
     def test_export_glb_mixed_resources(self):
         """Tests embedding both buffer and image resources into a GLB"""
+        # Arrange
         # Sample buffer 1 data
         buffer_1_filename = 'buffer_1.bin'
         buffer_1_data = b'sample buffer one data'
@@ -323,9 +389,12 @@ class TestGLTF(TestCase):
             FileResource(filename=buffer_2_filename, data=buffer_2_data),
             FileResource(filename=image_filename, data=image_data, mimetype='image/jpeg')
         ])
-        # Export the GLB
+
+        # Act
         filename = path.join(TEMP_DIR, 'sample4.glb')
         gltf.export(filename)
+
+        # Assert
         # Read the file back in and verify expected structure
         glb = GLTF.load_glb(filename)
         self.assertEqual(model.asset, glb.model.asset)
@@ -367,11 +436,16 @@ class TestGLTF(TestCase):
         Ensure that when exporting a GLB model with an existing GLBResource and a GLB buffer works correctly (existing
         buffer and resource should be preserved, and no new ones added)
         """
+        # Arrange
         model = GLTFModel(asset=Asset(version='2.0'), buffers=[Buffer(byteLength=4)])
         resource = GLBResource(b'data')
         gltf = GLTF(model=model, resources=[resource])
+
+        # Act
         filename = path.join(TEMP_DIR, 'sample5.glb')
         gltf.export(filename)
+
+        # Assert
         # Load back the GLB and ensure it has the correct structure
         glb = GLTF.load(filename)
         self.assertEqual(1, len(glb.model.buffers))
@@ -389,6 +463,7 @@ class TestGLTF(TestCase):
         """
         Tests exporting a binary GLB file with image resources remaining external.
         """
+        # Arrange
         # Sample buffer 1 data
         buffer_1_filename = 'buffer_1.bin'
         buffer_1_data = b'sample buffer one data'
@@ -418,9 +493,13 @@ class TestGLTF(TestCase):
             FileResource(filename=buffer_2_filename, data=buffer_2_data),
             FileResource(filename=image_filename, data=image_data, mimetype='image/jpeg')
         ])
+
+        # Act
         # Export the GLB (do not embed image resources)
         filename = path.join(TEMP_DIR, 'sample6.glb')
         gltf.export_glb(filename, embed_image_resources=False)
+
+        # Assert
         # Ensure the image got saved
         self.assertTrue(path.exists(path.join(TEMP_DIR, image_filename)))
         # Read the file back in and verify expected structure
@@ -463,6 +542,7 @@ class TestGLTF(TestCase):
         """
         Tests exporting a binary GLB file with all resources (buffer and image) remaining external.
         """
+        # Arrange
         # Sample buffer 1 data (this will remain external)
         buffer_1_filename = 'sample_7_buffer_1.bin'
         buffer_1_data = b'sample buffer one data'
@@ -492,9 +572,13 @@ class TestGLTF(TestCase):
             FileResource(filename=buffer_2_filename, data=buffer_2_data),
             FileResource(filename=image_filename, data=image_data, mimetype='image/jpeg')
         ])
+
+        # Act
         # Export the GLB (do not embed buffer or image resources)
         filename = path.join(TEMP_DIR, 'sample7.glb')
         gltf.export_glb(filename, embed_buffer_resources=False, embed_image_resources=False)
+
+        # Assert
         # Ensure the buffer and image files got saved
         self.assertTrue(path.exists(path.join(TEMP_DIR, buffer_1_filename)))
         self.assertTrue(path.exists(path.join(TEMP_DIR, buffer_2_filename)))
@@ -547,6 +631,7 @@ class TestGLTF(TestCase):
         When exporting a binary GLB with some resources remaining external, test that we can skip actually saving these
         external resources by setting the save_file_resources to False during export.
         """
+        # Arrange
         # Sample buffer data
         buffer_filename = 'buffer.bin'
         buffer_data = b'sample buffer one data'
@@ -563,9 +648,13 @@ class TestGLTF(TestCase):
             FileResource(filename=buffer_filename, data=buffer_data),
             FileResource(filename=image_filename, data=image_data, mimetype='image/jpeg')
         ])
+
+        # Act
         # Export the GLB (do not embed image resources, and skip saving file resources)
         filename = path.join(TEMP_DIR, 'sample8.glb')
         gltf.export_glb(filename, embed_image_resources=False, save_file_resources=False)
+
+        # Assert
         # Ensure the image did NOT get saved
         self.assertFalse(path.exists(path.join(TEMP_DIR, image_filename)))
         # Read the file back in and verify expected structure
@@ -594,15 +683,20 @@ class TestGLTF(TestCase):
         When converting a glTF with external file resources that were not explicitly loaded when calling GLTF.load(),
         the resources should get automatically loaded when exporting to GLB.
         """
+        # Arrange
         # Load a glTF model with load_file_resources set to False
         gltf = GLTF.load(sample('BoxTextured/BoxTextured.gltf'), load_file_resources=False)
         # Resource should initially not be loaded
         resource = gltf.get_resource('CesiumLogoFlat.png')
         self.assertIsInstance(resource, FileResource)
         self.assertFalse(resource.loaded)
+
+        # Act
         # Convert the glTF to a GLB
         filename = path.join(TEMP_DIR, 'sample9.glb')
         gltf.export(filename)
+
+        # Assert
         # Ensure resource got loaded
         self.assertTrue(resource.loaded)
 
@@ -612,16 +706,21 @@ class TestGLTF(TestCase):
         then converting the glTF to a GLB with the image resource remaining external, it should be loaded and copied
         when calling export_glb.
         """
+        # Arrange
         # Load a glTF model with load_file_resources set to False
         gltf = GLTF.load(sample('BoxTextured/BoxTextured.gltf'), load_file_resources=False)
         # Resource should initially not be loaded
         resource = gltf.get_resource('CesiumLogoFlat.png')
         self.assertIsInstance(resource, FileResource)
         self.assertFalse(resource.loaded)
+
+        # Act
         # Convert the glTF to a GLB without embedding the resource. However, set save_file_resources to True, so
         # the image should still get loaded and saved.
         filename = path.join(TEMP_DIR, 'sample10.glb')
         gltf.export_glb(filename, embed_image_resources=False, save_file_resources=True)
+
+        # Assert
         # Ensure resource is now loaded
         self.assertTrue(resource.loaded)
         # Ensure image got saved
@@ -638,15 +737,20 @@ class TestGLTF(TestCase):
         When converting a glTF with external file resources that were not explicitly loaded when calling GLTF.load(),
         the resources should remain not loaded if exporting without embedding or saving image resources.
         """
+        # Arrange
         # Load a glTF model with load_file_resources set to False
         gltf = GLTF.load(sample('BoxTextured/BoxTextured.gltf'), load_file_resources=False)
         # Resource should initially not be loaded
         resource = gltf.get_resource('CesiumLogoFlat.png')
         self.assertIsInstance(resource, FileResource)
         self.assertFalse(resource.loaded)
+
+        # Act
         # Convert the glTF to a GLB without embedding or saving image resources
         filename = path.join(TEMP_DIR, 'sample11.glb')
         gltf.export_glb(filename, embed_image_resources=False, save_file_resources=False)
+
+        # Assert
         # Ensure resource remains not loaded
         self.assertFalse(resource.loaded)
 
@@ -655,9 +759,12 @@ class TestGLTF(TestCase):
         When exporting a model as glTF, it may not have a GLB resource (the GLB resource needs to be converted to either
         a FileResource or EmbeddedResource first).
         """
+        # Arrange
         model = GLTFModel(asset=Asset(version='2.0'), buffers=[Buffer(byteLength=4)])
         resource = GLBResource(b'data')
         gltf = GLTF(model=model, resources=[resource])
+
+        # Act/Assert
         filename = path.join(TEMP_DIR, 'sample12.gltf')
         with self.assertRaises(TypeError):
             gltf.export(filename)
