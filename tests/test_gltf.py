@@ -555,7 +555,7 @@ class TestGLTF(TestCase):
         ])
 
         # Act
-        filename = path.join(TEMP_DIR, 'sample2.glb')
+        filename = path.join(TEMP_DIR, 'test_export_glb_multiple_buffers.glb')
         gltf2 = gltf.export(filename)
 
         # Assert
@@ -607,7 +607,7 @@ class TestGLTF(TestCase):
         gltf = GLTF(model=model, resources=[FileResource(filename=image_filename, data=data, mimetype='image/jpeg')])
 
         # Act
-        filename = path.join(TEMP_DIR, 'sample3.glb')
+        filename = path.join(TEMP_DIR, 'test_export_glb_embed_image.glb')
         gltf.export(filename)
 
         # Assert
@@ -684,7 +684,7 @@ class TestGLTF(TestCase):
         ])
 
         # Act
-        filename = path.join(TEMP_DIR, 'sample4.glb')
+        filename = path.join(TEMP_DIR, 'test_export_glb_mixed_resources.glb')
         gltf2 = gltf.export(filename)
 
         # Assert
@@ -775,7 +775,7 @@ class TestGLTF(TestCase):
         gltf = GLTF(model=model, resources=[glb_resource, file_resource])
 
         # Act
-        filename = path.join(TEMP_DIR, 'sample5.glb')
+        filename = path.join(TEMP_DIR, 'test_export_glb_with_embedded_image.glb')
         gltf2 = gltf.export(filename)
 
         # Assert
@@ -828,7 +828,7 @@ class TestGLTF(TestCase):
         gltf = GLTF(model=model, resources=[resource])
 
         # Act
-        filename = path.join(TEMP_DIR, 'sample6.glb')
+        filename = path.join(TEMP_DIR, 'test_export_glb_with_existing_glb_buffer_and_resource.glb')
         gltf.export(filename)
 
         # Assert
@@ -859,7 +859,7 @@ class TestGLTF(TestCase):
         buffer_2_data = b'sample buffer two data'
         buffer_2_bytelen = len(buffer_2_data)
         # Sample image data (this will remain external)
-        image_filename = 'sample7.png'
+        image_filename = 'sample_image.png'
         image_data = b'sample image data'
         # Create GLTF Model
         model = GLTFModel(asset=Asset(version='2.0'),
@@ -882,7 +882,7 @@ class TestGLTF(TestCase):
 
         # Act
         # Export the GLB (do not embed image resources)
-        filename = path.join(TEMP_DIR, 'sample7.glb')
+        filename = path.join(TEMP_DIR, 'test_export_glb_with_external_image_resource.glb')
         gltf.export_glb(filename, embed_image_resources=False)
 
         # Assert
@@ -961,7 +961,7 @@ class TestGLTF(TestCase):
 
         # Act
         # Export the GLB (do not embed buffer or image resources)
-        filename = path.join(TEMP_DIR, 'sample8.glb')
+        filename = path.join(TEMP_DIR, 'test_export_glb_with_all_resources_remaining_external.glb')
         gltf.export_glb(filename, embed_buffer_resources=False, embed_image_resources=False)
 
         # Assert
@@ -1023,8 +1023,12 @@ class TestGLTF(TestCase):
         buffer_data = b'sample buffer one data'
         buffer_bytelen = len(buffer_data)
         # Sample image data (this will remain external, and we will skip actually saving it)
-        image_filename = 'sample9.png'
+        image_filename = 'sample_image.png'
         image_data = b'sample image data'
+        # Delete sample image if it exists
+        image_path = path.join(TEMP_DIR, image_filename)
+        if path.exists(image_path):
+            os.remove(image_path)
         # Create GLTF Model
         model = GLTFModel(asset=Asset(version='2.0'),
                           buffers=[Buffer(uri=buffer_filename, byteLength=buffer_bytelen)],
@@ -1037,7 +1041,7 @@ class TestGLTF(TestCase):
 
         # Act
         # Export the GLB (do not embed image resources, and skip saving file resources)
-        filename = path.join(TEMP_DIR, 'sample9.glb')
+        filename = path.join(TEMP_DIR, 'test_export_glb_with_external_image_resource_skip_saving_files.glb')
         gltf.export_glb(filename, embed_image_resources=False, save_file_resources=False)
 
         # Assert
@@ -1079,7 +1083,7 @@ class TestGLTF(TestCase):
 
         # Act
         # Convert the glTF to a GLB
-        filename = path.join(TEMP_DIR, 'sample10.glb')
+        filename = path.join(TEMP_DIR, 'test_export_glb_with_resource_not_yet_loaded.glb')
         exported_glb = gltf.export(filename)
 
         # Assert
@@ -1113,7 +1117,7 @@ class TestGLTF(TestCase):
         # Act
         # Convert the glTF to a GLB without embedding the resource. However, set save_file_resources to True, so
         # the image should still get loaded and saved.
-        filename = path.join(TEMP_DIR, 'sample11.glb')
+        filename = path.join(TEMP_DIR, 'test_export_glb_with_resource_not_yet_loaded_without_embedding.glb')
         exported_glb = gltf.export_glb(filename, embed_image_resources=False, save_file_resources=True)
 
         # Assert
@@ -1121,6 +1125,7 @@ class TestGLTF(TestCase):
         self.assertFalse(resource.loaded)
         # Exported image resource should be loaded
         exported_resource = exported_glb.get_resource('CesiumLogoFlat.png')
+        self.assertIsInstance(exported_resource, FileResource)
         self.assertTrue(exported_resource.loaded)
         # Ensure image got saved
         image_filename = path.join(TEMP_DIR, 'CesiumLogoFlat.png')
@@ -1146,7 +1151,8 @@ class TestGLTF(TestCase):
 
         # Act
         # Convert the glTF to a GLB without embedding or saving image resources
-        filename = path.join(TEMP_DIR, 'sample12.glb')
+        filename = path.join(TEMP_DIR, 'test_resource_remains_not_loaded_when_exporting_glb_without_embedding_or_'
+                                       'saving_file_resources.glb')
         gltf.export_glb(filename, embed_image_resources=False, save_file_resources=False)
 
         # Assert
@@ -1164,7 +1170,7 @@ class TestGLTF(TestCase):
         gltf = GLTF(model=model, resources=[resource])
 
         # Act/Assert
-        filename = path.join(TEMP_DIR, 'sample13.gltf')
+        filename = path.join(TEMP_DIR, 'test_export_gltf_raises_error_if_glb_resource_is_present.gltf')
         with self.assertRaises(TypeError):
             gltf.export(filename)
 
@@ -1177,7 +1183,7 @@ class TestGLTF(TestCase):
         gltf = GLTF(model=model, resources=[glb_resource_1, glb_resource_2])
 
         # Act
-        filename = path.join(TEMP_DIR, 'sample14.glb')
+        filename = path.join(TEMP_DIR, 'test_export_glb_with_multiple_glb_resources.glb')
         gltf2 = gltf.export(filename)
 
         # Assert
