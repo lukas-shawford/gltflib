@@ -4,8 +4,9 @@ import warnings
 from os import path
 from urllib.parse import urlparse
 from typing import Type, TypeVar, List, Optional, Set, BinaryIO
-from .gltf_resource import GLTFResource, FileResource, ExternalResource, GLBResource, GLB_JSON_CHUNK_TYPE,\
-    GLB_BINARY_CHUNK_TYPE
+from .gltf_resource import (
+    GLTFResource, FileResource, ExternalResource, GLBResource, Base64Resource, GLB_JSON_CHUNK_TYPE,
+    GLB_BINARY_CHUNK_TYPE)
 from .models import GLTFModel, Buffer, BufferView
 from .utils import padbytes
 
@@ -59,7 +60,7 @@ class GLTF:
             data = f.read()
             gltf.model = GLTFModel.from_json(data)
         basepath = path.dirname(filename)
-        gltf._load_file_resources(basepath, load_file_resources)
+        gltf._load_resources(basepath, load_file_resources)
         return gltf
 
     @classmethod
@@ -78,7 +79,7 @@ class GLTF:
         with open(filename, 'rb') as f:
             gltf._load_glb(f)
         basepath = path.dirname(filename)
-        gltf._load_file_resources(basepath, load_file_resources)
+        gltf._load_resources(basepath, load_file_resources)
         return gltf
 
     @property
@@ -181,21 +182,20 @@ class GLTF:
             return glb_resource
         if isinstance(resource, ExternalResource):
             raise TypeError("Embedding an ExternalResource is not supported")
-        if isinstance(resource, FileResource):
-            if not resource.loaded:
-                resource.load()
+        if isinstance(resource, FileResource) and not resource.loaded:
+            resource.load()
+        if isinstance(resource, FileResource) or isinstance(resource, Base64Resource):
             data = bytearray(resource.data)
             glb_resource, offset, bytelen = self._create_or_extend_glb_resource(data)
             self.resources.remove(resource)
-            self._update_model_after_embedding_resource(resource.uri, offset, bytelen)
-        # TODO: Handle Base64Resources
+            self._update_model_after_embedding_resource(resource, offset, bytelen)
         return glb_resource
 
-    def _update_model_after_embedding_resource(self, uri: str, offset: int, bytelen: int):
+    def _update_model_after_embedding_resource(self, resource: GLTFResource, offset: int, bytelen: int):
         if self.model.buffers is not None:
             enumerated_buffers = list(enumerate(self.model.buffers))
             for i, buffer in enumerated_buffers:
-                if buffer.uri == uri:
+                if buffer.uri == resource.uri:
                     # Remove the buffer since it is now embedded
                     self.model.buffers.remove(buffer)
                     # Update any buffers views that point to this buffer
@@ -207,8 +207,13 @@ class GLTF:
                                 buffer_view.buffer -= 1
         if self.model.images is not None:
             for i, image in enumerate(self.model.images):
-                if image.uri == uri:
+                if image.uri == resource.uri:
                     image.bufferView = self._create_embedded_image_buffer_view(offset, bytelen)
+                    # If the resource is a Base64 resource, then delete the image URI so we're not representing the
+                    # data twice, and preserve the MIME type.
+                    if isinstance(resource, Base64Resource):
+                        image.uri = None
+                        image.mimeType = resource.mime_type
 
     def _update_buffer_views_after_embedding_resource(self, buffer_index: int, offset: int):
         if self.model.bufferViews is not None:
@@ -252,7 +257,7 @@ class GLTF:
                          if image.uri is not None and image.bufferView is None])
         return uris
 
-    def _load_file_resources(self, basepath: str, autoload=False) -> None:
+    def _load_resources(self, basepath: str, autoload=False) -> None:
         self.resources = self.resources or []
         for uri in self._get_resource_uris_from_model():
             resource = _get_resource(uri, basepath, autoload)
@@ -460,6 +465,8 @@ def _get_resource(uri, basepath: str, autoload=False) -> Optional[GLTFResource]:
     scheme, netloc, urlpath, params, query, fragment = urlparse(uri)
     if netloc:
         return ExternalResource(uri)
+    elif scheme == 'data':
+        return Base64Resource.from_uri(uri)
     elif not scheme:
         return FileResource(uri, basepath, autoload)
     return None

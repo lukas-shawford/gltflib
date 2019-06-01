@@ -1,10 +1,11 @@
 import os
 import shutil
 import json
+import base64
 from os import path
 from unittest import TestCase
 from gltflib import (
-    GLTF, GLTFModel, Asset, FileResource, ExternalResource, Buffer, BufferView, Image, GLBResource,
+    GLTF, GLTFModel, Asset, FileResource, ExternalResource, Buffer, BufferView, Image, GLBResource, Base64Resource,
     GLB_BINARY_CHUNK_TYPE)
 
 
@@ -94,27 +95,19 @@ class TestGLTF(TestCase):
     def test_load_image_resources(self):
         """Ensure image resources are loaded"""
         # Act
-        gltf = GLTF.load(sample('BoxTextured/BoxTextured.gltf'), load_file_resources=True)
+        gltf = GLTF.load(sample('BoxTextured/gltf/BoxTextured.gltf'), load_file_resources=True)
         texture = gltf.get_resource('CesiumLogoFlat.png')
 
         # Assert
         self.assertIsInstance(texture, FileResource)
-        with open(sample('BoxTextured/CesiumLogoFlat.png'), 'rb') as f:
+        with open(sample('BoxTextured/gltf/CesiumLogoFlat.png'), 'rb') as f:
             texture_data = f.read()
         self.assertEqual(texture_data, texture.data)
-
-    def test_load_embedded_resources(self):
-        """Embedded resources should not be parsed (for now?)"""
-        # Act
-        gltf = GLTF.load(sample('BoxTexturedEmbedded/BoxTextured.gltf'))
-
-        # Assert
-        self.assertEqual(0, len(gltf.resources))
 
     def test_load_external_resources(self):
         """External resources should be parsed as ExternalResource instances, but otherwise ignored (for now)"""
         # Act
-        gltf = GLTF.load(sample('BoxTexturedExternal/BoxTextured.gltf'))
+        gltf = GLTF.load(sample('BoxTextured/external/BoxTextured.gltf'))
         uri = 'https://www.example.com'
         resource = gltf.get_resource(uri)
 
@@ -279,7 +272,7 @@ class TestGLTF(TestCase):
         """
         # Arrange
         # Load a glTF model with load_file_resources set to False
-        gltf = GLTF.load(sample('BoxTextured/BoxTextured.gltf'), load_file_resources=False)
+        gltf = GLTF.load(sample('BoxTextured/gltf/BoxTextured.gltf'), load_file_resources=False)
         # Resource should initially not be loaded
         resource = gltf.get_resource('CesiumLogoFlat.png')
         self.assertIsInstance(resource, FileResource)
@@ -1075,7 +1068,7 @@ class TestGLTF(TestCase):
         """
         # Arrange
         # Load a glTF model with load_file_resources set to False
-        gltf = GLTF.load(sample('BoxTextured/BoxTextured.gltf'), load_file_resources=False)
+        gltf = GLTF.load(sample('BoxTextured/gltf/BoxTextured.gltf'), load_file_resources=False)
         # Ensure resource is initially not loaded
         resource = gltf.get_resource('CesiumLogoFlat.png')
         self.assertIsInstance(resource, FileResource)
@@ -1108,7 +1101,7 @@ class TestGLTF(TestCase):
         """
         # Arrange
         # Load a glTF model with load_file_resources set to False
-        gltf = GLTF.load(sample('BoxTextured/BoxTextured.gltf'), load_file_resources=False)
+        gltf = GLTF.load(sample('BoxTextured/gltf/BoxTextured.gltf'), load_file_resources=False)
         # Resource should initially not be loaded
         resource = gltf.get_resource('CesiumLogoFlat.png')
         self.assertIsInstance(resource, FileResource)
@@ -1130,7 +1123,7 @@ class TestGLTF(TestCase):
         # Ensure image got saved
         image_filename = path.join(TEMP_DIR, 'CesiumLogoFlat.png')
         self.assertTrue(path.exists(image_filename))
-        with open(sample('BoxTextured/CesiumLogoFlat.png'), 'rb') as f:
+        with open(sample('BoxTextured/gltf/CesiumLogoFlat.png'), 'rb') as f:
             original_texture_data = f.read()
         with open(image_filename, 'rb') as f:
             texture_data = f.read()
@@ -1143,7 +1136,7 @@ class TestGLTF(TestCase):
         """
         # Arrange
         # Load a glTF model with load_file_resources set to False
-        gltf = GLTF.load(sample('BoxTextured/BoxTextured.gltf'), load_file_resources=False)
+        gltf = GLTF.load(sample('BoxTextured/gltf/BoxTextured.gltf'), load_file_resources=False)
         # Resource should initially not be loaded
         resource = gltf.get_resource('CesiumLogoFlat.png')
         self.assertIsInstance(resource, FileResource)
@@ -1219,6 +1212,211 @@ class TestGLTF(TestCase):
         self.assertEqual(b'data', glb_resource_1.data)
         self.assertEqual(b'more data\x00\x00\x00', glb_resource_2.data)
 
+    def test_create_base64_resource_from_uri(self):
+        """Ensures a Base64Resource is created successfully using the Base64Resource.from_uri factory method."""
+        # Arrage
+        uri = 'data:application/octet-stream;base64,c2FtcGxlIGJpbmFyeSBkYXRh'
+
+        # Act
+        resource = Base64Resource.from_uri(uri)
+
+        # Assert
+        self.assertEqual(b'sample binary data', resource.data)
+        self.assertEqual('application/octet-stream', resource.mime_type)
+
+    def test_load_gltf_with_base64_resource(self):
+        """Basic test to ensure a model with an embedded base64-encoded resource is parsed correctly."""
+        # Act
+        gltf = GLTF.load(sample('Box/base64/Box.gltf'))
+
+        # Assert
+        # Ensure the resource got parsed correctly as a Base64Resource
+        self.assertEqual(1, len(gltf.resources))
+        resource = gltf.resources[0]
+        self.assertIsInstance(resource, Base64Resource)
+        # Ensure byte length is correct
+        self.assertEqual(648, len(resource.data))
+        # Ensure binary data matches
+        with open(sample('Box/gltf/Box0.bin'), 'rb') as f:
+            data = f.read()
+        self.assertEqual(data, resource.data)
+        # Ensure buffer URI is preserved as base64
+        buffer = gltf.model.buffers[0]
+        self.assertTrue(buffer.uri.startswith('data:application/octet-stream;base64,AAAAAAAAAAAAAIA'))
+        # Ensure MIME type is parsed correctly
+        self.assertEqual('application/octet-stream', resource.mime_type)
+
+    def test_load_gltf_with_base64_image_resource(self):
+        """Ensure a base64-encoded image resource is parsed correctly."""
+        # Act
+        gltf = GLTF.load(sample('BoxTextured/base64/BoxTextured.gltf'))
+
+        # Assert
+        # There should be two resources (one for the image and another for the buffer data)
+        self.assertEqual(2, len(gltf.resources))
+        buffer_resource = next(r for r in gltf.resources if isinstance(r, Base64Resource)
+                               and r.mime_type == 'application/octet-stream')
+        image_resource = next(r for r in gltf.resources if isinstance(r, Base64Resource) and r.mime_type == 'image/png')
+        # Ensure byte length is correct on both resources
+        self.assertEqual(23516, len(image_resource.data))
+        self.assertEqual(840, len(buffer_resource.data))
+        # Ensure binary data matches on both resources
+        with open(sample('BoxTextured/gltf/CesiumLogoFlat.png'), 'rb') as f1:
+            image_data = f1.read()
+        with open(sample('BoxTextured/gltf/BoxTextured0.bin'), 'rb') as f2:
+            buffer_data = f2.read()
+        self.assertEqual(image_data, image_resource.data)
+        self.assertEqual(buffer_data, buffer_resource.data)
+        # Ensure image URI is preserved as base64
+        image = gltf.model.images[0]
+        self.assertTrue(image.uri.startswith('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA'))
+        # Ensure buffer URI is preserved as base64
+        buffer = gltf.model.buffers[0]
+        self.assertTrue(buffer.uri.startswith('data:application/octet-stream;base64,AAAAAAAAAAAAAIA'))
+        # Ensure MIME types are parsed correctly
+        self.assertEqual('image/png', image_resource.mime_type)
+        self.assertEqual('application/octet-stream', buffer_resource.mime_type)
+
+    def test_export_gltf_with_base64_resources(self):
+        """Ensure a model with Base64-encoded resources can be exported successfully"""
+        # Arrange
+        # Sample buffer 1 data
+        buffer_1_data = b'sample buffer one data'
+        buffer_1_bytelen = len(buffer_1_data)
+        buffer_1_uri = 'data:application/octet-stream;base64,' + base64.b64encode(buffer_1_data).decode('utf-8')
+        # Sample buffer 2 data
+        buffer_2_data = b'sample buffer two data'
+        buffer_2_bytelen = len(buffer_2_data)
+        buffer_2_uri = 'data:application/octet-stream;base64,' + base64.b64encode(buffer_2_data).decode('utf-8')
+        # Sample image data
+        image_data = b'sample image data'
+        image_uri = 'data:image/png;base64,' + base64.b64encode(image_data).decode('utf-8')
+        # Create resources
+        resource_1 = Base64Resource.from_uri(buffer_1_uri)
+        resource_2 = Base64Resource.from_uri(buffer_2_uri)
+        resource_3 = Base64Resource.from_uri(image_uri)
+        # Create GLTF Model
+        model = GLTFModel(asset=Asset(version='2.0'),
+                          buffers=[
+                              Buffer(uri=buffer_1_uri, byteLength=buffer_1_bytelen),
+                              Buffer(uri=buffer_2_uri, byteLength=buffer_2_bytelen)
+                          ],
+                          bufferViews=[
+                              BufferView(buffer=0, byteOffset=0, byteLength=10),
+                              BufferView(buffer=0, byteOffset=10, byteLength=12),
+                              BufferView(buffer=1, byteOffset=0, byteLength=10),
+                              BufferView(buffer=1, byteOffset=10, byteLength=12)
+                          ],
+                          images=[Image(uri=image_uri)])
+        gltf = GLTF(model=model, resources=[resource_1, resource_2, resource_3])
+
+        # Act
+        filename = path.join(TEMP_DIR, 'test_export_gltf_with_base64_resources.gltf')
+        exported_gltf = gltf.export(filename)
+
+        # Assert
+        # Read the model back in
+        loaded_gltf = GLTF.load(filename)
+        # Ensure resources got parsed correctly
+        self.assertEqual(3, len(loaded_gltf.resources))
+        self.assertTrue(buffer_1_uri in [r.uri for r in loaded_gltf.resources])
+        self.assertTrue(buffer_2_uri in [r.uri for r in loaded_gltf.resources])
+        self.assertTrue(image_uri in [r.uri for r in loaded_gltf.resources])
+        # Extract the resources that correspond to the originals (which may have been loaded in different order)
+        loaded_resource_1 = next(r for r in loaded_gltf.resources if r.uri == buffer_1_uri)
+        loaded_resource_2 = next(r for r in loaded_gltf.resources if r.uri == buffer_2_uri)
+        loaded_resource_3 = next(r for r in loaded_gltf.resources if r.uri == image_uri)
+        # Ensure all resources got correctly parsed as Base64Resource
+        self.assertIsInstance(loaded_resource_1, Base64Resource)
+        self.assertIsInstance(loaded_resource_2, Base64Resource)
+        self.assertIsInstance(loaded_resource_3, Base64Resource)
+        # Ensure data URIs match
+        self.assertEqual(buffer_1_uri, loaded_resource_1.uri)
+        self.assertEqual(buffer_2_uri, loaded_resource_2.uri)
+        self.assertEqual(image_uri, loaded_resource_3.uri)
+        # Ensure contents are binary equal
+        self.assertEqual(buffer_1_data, loaded_resource_1.data)
+        self.assertEqual(buffer_2_data, loaded_resource_2.data)
+        self.assertEqual(image_data, loaded_resource_3.data)
+        # Ensure MIME types were stored correctly
+        self.assertEqual('application/octet-stream', loaded_resource_1.mime_type)
+        self.assertEqual('application/octet-stream', loaded_resource_2.mime_type)
+        self.assertEqual('image/png', loaded_resource_3.mime_type)
+        # Ensure exported GLTF instance contains the same 3 resources
+        self.assertEqual(3, len(exported_gltf.resources))
+        exported_resource_1 = exported_gltf.resources[0]
+        exported_resource_2 = exported_gltf.resources[1]
+        exported_resource_3 = exported_gltf.resources[2]
+        self.assertIsInstance(exported_resource_1, Base64Resource)
+        self.assertIsInstance(exported_resource_2, Base64Resource)
+        self.assertIsInstance(exported_resource_3, Base64Resource)
+        # Ensure resource data in the exported GLTF instance matches
+        self.assertEqual(buffer_1_data, exported_resource_1.data)
+        self.assertEqual(buffer_2_data, exported_resource_2.data)
+        self.assertEqual(image_data, exported_resource_3.data)
+
+    def test_embed_base64_resource_to_glb(self):
+        """Ensure base64-encoded resources can be embedded as GLB using embed_resource."""
+        # Arrage
+        gltf = GLTF.load(sample('BoxTextured/base64/BoxTextured.gltf'))
+        image_resource = gltf.resources[0]
+        buffer_resource = gltf.resources[1]
+
+        # Act
+        gltf.embed_resource(image_resource)
+        gltf.embed_resource(buffer_resource)
+
+        # Assert
+        # There should now be one GLB resource
+        self.assertEqual(1, len(gltf.resources))
+        glb_resource = gltf.get_glb_resource()
+        self.assertIsInstance(glb_resource, GLBResource)
+        # Ensure byte length is correct on the resource
+        self.assertEqual(24356, len(glb_resource.data))
+        # Ensure URIs are now undefined in the model so the data is not being represented twice
+        self.assertIsNone(gltf.model.images[0].uri)
+        self.assertIsNone(gltf.model.buffers[0].uri)
+        # Ensure image MIME type is preserved
+        self.assertEqual('image/png', gltf.model.images[0].mimeType)
+
+    def test_export_base64_resource_to_glb(self):
+        """Ensure exporting a model containing base64-encoded resources to GLB."""
+        # Arrage
+        gltf = GLTF.load(sample('BoxTextured/base64/BoxTextured.gltf'))
+
+        # Act
+        filename = path.join(TEMP_DIR, 'test_export_base64_resource_to_glb.glb')
+        exported_glb = gltf.export(filename)
+
+        # Assert
+        # Exported GLB instance should contain one GLB resource
+        self.assertEqual(1, len(exported_glb.resources))
+        exported_glb_resource = exported_glb.get_glb_resource()
+        self.assertIsInstance(exported_glb_resource, GLBResource)
+        # Ensure byte length is correct on the exported resource
+        self.assertEqual(24356, len(exported_glb_resource.data))
+        # Read the exported model back in and verify expected structure
+        loaded_glb = GLTF.load(filename)
+        self.assertEqual(1, len(loaded_glb.resources))
+        glb_resource = loaded_glb.get_glb_resource()
+        self.assertIsInstance(glb_resource, GLBResource)
+        # Ensure byte length is correct on the loaded GLB resource
+        self.assertEqual(24356, len(glb_resource.data))
+        # Ensure image buffer view points to the embedded GLB buffer and URI is not defined
+        buffer_view = loaded_glb.model.images[0].bufferView
+        self.assertEqual(0, loaded_glb.model.bufferViews[buffer_view].buffer)
+        self.assertIsNone(loaded_glb.model.images[0].uri)
+        # Ensure image data matches
+        image_resource = next(r for r in gltf.resources if isinstance(r, Base64Resource) and r.mime_type == 'image/png')
+        image_buffer_view_index = loaded_glb.model.images[0].bufferView
+        image_buffer_view = loaded_glb.model.bufferViews[image_buffer_view_index]
+        offset = image_buffer_view.byteOffset
+        bytelen = image_buffer_view.byteLength
+        image_data = glb_resource.data[offset:(offset + bytelen)]
+        self.assertEqual(image_resource.data, image_data)
+        self.assertEqual('image/png', image_resource.mime_type)
+
 
 # TODO:
-#  - Add support for Base64Resource
+#  - Add ability to convert between FileResource, Base64Resource, and GLBResource
+#  - GLBs may reference external file resources (in addition to the embedded binary chunk) - test these are handled

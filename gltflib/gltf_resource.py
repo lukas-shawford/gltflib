@@ -1,6 +1,6 @@
 import struct
 import magic
-import copy
+import base64
 from os import path
 from abc import ABC, abstractmethod
 from typing import Optional
@@ -123,3 +123,35 @@ class GLBResource(GLTFResource):
 
     def clone(self) -> 'GLBResource':
         return GLBResource(self.data, self._resource_type)
+
+
+class Base64Resource(GLTFResource):
+    """
+    Base64-encoded resource embedded directly inside a JSON-based (non-binary) glTF model.
+    """
+
+    def __init__(self, data: bytes, mime_type: str):
+        encoded_data = base64.b64encode(data).decode('utf-8')
+        datauri = f'data:{mime_type};base64,{encoded_data}'
+        super(Base64Resource, self).__init__(datauri, data)
+        self.mime_type = mime_type
+
+    @staticmethod
+    def from_uri(uri: str) -> 'Base64Resource':
+        prefix, urlpath = uri.split(':', 1)
+        if prefix != 'data':
+            raise ValueError(f'Invalid Data URI (must have a "data:" prefix). '
+                             f'First 50 chars of Data URI follow: "{uri[:50]}"')
+        header, encoded_data = urlpath.split(',', 1)
+        mime_type, encoding = header.split(';', 1)
+        if encoding != 'base64':
+            raise RuntimeError(f'Unsupported encoding scheme in embedded data URI: "{encoding}". '
+                               f'Only "base64" encoding is supported.')
+        data = base64.b64decode(encoded_data)
+        return Base64Resource(data, mime_type)
+
+    def __repr__(self):
+        return f'Base64Resource({len(self.data)} bytes)'
+
+    def clone(self) -> 'Base64Resource':
+        return Base64Resource(self.data, self.mime_type)
