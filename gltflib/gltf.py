@@ -324,8 +324,6 @@ class GLTF:
             raise RuntimeError(f'Unexpected EOF when parsing JSON chunk body. The GLB file may be corrupt.')
         model_json = b.decode('utf-8').strip()
         self.model = GLTFModel.from_json(model_json)
-        # TODO: GLBs may reference external file resources (in addition to the embedded binary chunk) - those should be
-        #  loaded here.
 
     def _load_glb_binary_chunk_body(self, f: BinaryIO, chunk_type: int, bytelen: int) -> None:
         if bytelen == 0:

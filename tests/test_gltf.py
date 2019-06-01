@@ -1416,7 +1416,41 @@ class TestGLTF(TestCase):
         self.assertEqual(image_resource.data, image_data)
         self.assertEqual('image/png', image_resource.mime_type)
 
+    def test_load_gltf_with_external_resource(self):
+        """Test that a GLTF with external web URL resources is parsed correctly"""
+        # Arrange
+        image_uri = 'http://www.example.com/image.jpg'
+        data_uri = 'http://www.example.com/data.bin'
+
+        # Act
+        gltf = GLTF.load(sample('External/external.gltf'))
+
+        # Assert
+        self.assertEqual(2, len(gltf.resources))
+        self.assertTrue(image_uri in [r.uri for r in gltf.resources])
+        self.assertTrue(data_uri in [r.uri for r in gltf.resources])
+        image_resource = next(r for r in gltf.resources if r.uri == image_uri)
+        data_resource = next(r for r in gltf.resources if r.uri == data_uri)
+        self.assertIsInstance(image_resource, ExternalResource)
+        self.assertIsInstance(data_resource, ExternalResource)
+
+    def test_load_glb_with_external_resource(self):
+        """Test that a GLB with external web URL resources is parsed correctly"""
+        # Arrange
+        external_uri = 'http://www.example.com/data.bin'
+
+        # Act
+        gltf = GLTF.load(sample('External/external.glb'))
+
+        # Assert
+        self.assertEqual(1, len(gltf.resources))
+        resource = gltf.resources[0]
+        self.assertIsInstance(resource, ExternalResource)
+        self.assertEqual(external_uri, resource.uri)
+        # For now, attempting to access the resource data should throw a ValueError
+        with self.assertRaises(ValueError):
+            _ = resource.data
+
 
 # TODO:
 #  - Add ability to convert between FileResource, Base64Resource, and GLBResource
-#  - GLBs may reference external file resources (in addition to the embedded binary chunk) - test these are handled
