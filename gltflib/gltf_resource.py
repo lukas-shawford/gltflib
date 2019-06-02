@@ -81,7 +81,7 @@ class FileResource(GLTFResource):
         self.load()
         if self._data is None:
             raise ValueError("Attempted to export FileResource without data")
-        basepath = basepath or self._basepath
+        basepath = basepath if basepath is not None else self._basepath
         filename = path.join(basepath, self.filename) if basepath is not None else self.filename
         with open(filename, 'wb') as f:
             f.write(self._data)
@@ -104,6 +104,14 @@ class ExternalResource(GLTFResource):
     @property
     def data(self):
         raise ValueError("Data is not accessible for an external GLTF resource")
+
+    @property
+    def uri(self):
+        return self._uri
+
+    @uri.setter
+    def uri(self, value):
+        self._uri = value
 
     def clone(self) -> 'ExternalResource':
         return ExternalResource(self.uri)
@@ -130,7 +138,7 @@ class Base64Resource(GLTFResource):
     Base64-encoded resource embedded directly inside a JSON-based (non-binary) glTF model.
     """
 
-    def __init__(self, data: bytes, mime_type: str):
+    def __init__(self, data: bytes, mime_type: str = 'application/octet-stream'):
         encoded_data = base64.b64encode(data).decode('utf-8')
         datauri = f'data:{mime_type};base64,{encoded_data}'
         super(Base64Resource, self).__init__(datauri, data)

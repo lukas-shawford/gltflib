@@ -1,13 +1,7 @@
 from dataclasses import dataclass
 from dataclasses_json import dataclass_json
-from enum import Enum
 from typing import Optional
 from .named_base_model import NamedBaseModel
-
-
-class BufferTarget(Enum):
-    ARRAY_BUFFER = 34962
-    ELEMENT_ARRAY_BUFFER = 34963
 
 
 @dataclass_json

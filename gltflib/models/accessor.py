@@ -1,27 +1,8 @@
 from dataclasses import dataclass
 from dataclasses_json import dataclass_json
-from enum import Enum
-from typing import Optional, List, Any
+from typing import Optional, List
+from .sparse import Sparse
 from .named_base_model import NamedBaseModel
-
-
-class ComponentType(Enum):
-    BYTE = 5120
-    UNSIGNED_BYTE = 5121
-    SHORT = 5122
-    UNSIGNED_SHORT = 5123
-    UNSIGNED_INT = 5125
-    FLOAT = 5126
-
-
-class AccessorType(Enum):
-    SCALAR = 'SCALAR'
-    VEC2 = 'VEC2'
-    VEC3 = 'VEC3'
-    VEC4 = 'VEC4'
-    MAT2 = 'MAT2'
-    MAT3 = 'MAT3'
-    MAT4 = 'MAT4'
 
 
 @dataclass_json
@@ -54,4 +35,4 @@ class Accessor(NamedBaseModel):
     type: str = None
     max: Optional[List[float]] = None
     min: Optional[List[float]] = None
-    sparse: Optional[Any] = None
+    sparse: Optional[Sparse] = None

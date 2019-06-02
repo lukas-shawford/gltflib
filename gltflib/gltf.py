@@ -3,11 +3,11 @@ import copy
 import warnings
 from os import path
 from urllib.parse import urlparse
-from typing import Type, TypeVar, List, Optional, Set, BinaryIO
+from typing import Type, TypeVar, Tuple, List, Iterator, Iterable, Optional, Set, BinaryIO
 from .gltf_resource import (
     GLTFResource, FileResource, ExternalResource, GLBResource, Base64Resource, GLB_JSON_CHUNK_TYPE,
     GLB_BINARY_CHUNK_TYPE)
-from .models import GLTFModel, Buffer, BufferView
+from .models import GLTFModel, Buffer, BufferView, Image
 from .utils import padbytes
 
 
@@ -191,71 +191,151 @@ class GLTF:
             self._update_model_after_embedding_resource(resource, offset, bytelen)
         return glb_resource
 
-    def _update_model_after_embedding_resource(self, resource: GLTFResource, offset: int, bytelen: int):
-        if self.model.buffers is not None:
-            enumerated_buffers = list(enumerate(self.model.buffers))
-            for i, buffer in enumerated_buffers:
-                if buffer.uri == resource.uri:
-                    # Remove the buffer since it is now embedded
-                    self.model.buffers.remove(buffer)
-                    # Update any buffers views that point to this buffer
-                    self._update_buffer_views_after_embedding_resource(i, offset)
-                    # Decrement the buffer index on any buffer views that come after the removed buffer
-                    if self.model.bufferViews is not None:
-                        for buffer_view in self.model.bufferViews:
-                            if buffer_view.buffer > i:
-                                buffer_view.buffer -= 1
-        if self.model.images is not None:
-            for i, image in enumerate(self.model.images):
-                if image.uri == resource.uri:
-                    image.bufferView = self._create_embedded_image_buffer_view(offset, bytelen)
-                    # If the resource is a Base64 resource, then delete the image URI so we're not representing the
-                    # data twice, and preserve the MIME type.
-                    if isinstance(resource, Base64Resource):
-                        image.uri = None
-                        image.mimeType = resource.mime_type
+    def convert_to_file_resource(self, resource: GLTFResource, filename: str) -> FileResource:
+        """
+        Converts a given GLTFResource to a FileResource. Note the file will not be created until the model is saved
+        (with save_file_resources flag set to true).
 
-    def _update_buffer_views_after_embedding_resource(self, buffer_index: int, offset: int):
-        if self.model.bufferViews is not None:
-            for buffer_view in self.model.bufferViews:
-                if buffer_view.buffer == buffer_index:
-                    buffer_view.buffer = 0
-                    buffer_view.byteOffset += offset
+        If the resource is already a FileResource and the filename matches, no action is performed. If the filename is
+        different, then the filename will be updated on any buffers and images that reference it.
 
-    def _export_gltf(self, filename: str, save_file_resources=True) -> None:
-        if any(isinstance(resource, GLBResource) for resource in (self.resources or [])):
-            raise TypeError("Model may not contain resources of type GLBResource when exporting to GLTF. "
-                            "Convert the GLBResource to FileResource or EmbeddedResource prior to exporting to GLTF, "
-                            "or export to GLB instead.")
-        data = self.model.to_json()
-        with open(filename, 'w') as f:
-            f.write(data)
-        if save_file_resources:
-            self._validate_resources()
-            basepath = path.dirname(filename)
-            self._export_file_resources(basepath)
+        If the resource is a GLBResource or Base64Resource, it will be un-embedded and converted to an external file
+        resource, and any buffers that reference the resource will be updated appropriately. Any embedded images that
+        reference the resource will be updated. If the image previously referenced a buffer view, it will now reference
+        a URI instead; the corresponding buffer view will be removed if no other parts of the model refer to it.
+        Further, after removing the buffer view, if no other buffer views refer to the same buffer, then the buffer will
+        be removed as well.
 
-    def _export_glb(self, filename: str, embed_buffer_resources=True, embed_image_resources=True,
-                    save_file_resources=True) -> None:
-        if embed_buffer_resources:
-            self._embed_buffer_resources()
-        if embed_image_resources:
-            self._embed_image_resources()
-        with open(filename, 'wb') as f:
-            self._write_glb(f)
-        if save_file_resources:
-            self._validate_resources()
-            basepath = path.dirname(filename)
-            self._export_file_resources(basepath)
+        If the resource is an ExternalResource, this method will raise an error (accessing external resource data is not
+        supported).
 
-    def _get_resource_uris_from_model(self) -> Set:
-        uris = set()
-        if self.model.buffers is not None:
-            uris.update([buffer.uri for buffer in self.model.buffers if buffer.uri is not None])
-        if self.model.images is not None:
-            uris.update([image.uri for image in self.model.images
-                         if image.uri is not None and image.bufferView is None])
-        return uris
+        :param resource: Resource to convert.
+        :param filename: Filename to use for the external file resource when saving the model.
+        :return: Converted FileResource
+        """
+        if resource not in (self.resources or []):
+            raise RuntimeError(f'Resource with URI "{resource.uri}" was not found in the model.')
+        if isinstance(resource, FileResource):
+            if resource.filename == filename:
+                return resource
+            self._update_model_resources_by_uri(resource.filename, filename)
+            resource.filename = filename
+            return resource
+        if isinstance(resource, Base64Resource):
+            file_resource = FileResource(filename, data=resource.data, mimetype=resource.mime_type)
+            self._update_model_resources_by_uri(resource.uri, filename)
+            i = self.resources.index(resource)
+            self.resources.pop(i)
+            self.resources.insert(i, file_resource)
+            return file_resource
+        if isinstance(resource, GLBResource):
+            assert resource is self.get_glb_resource()
+            # Replace the GLB resource with a file resource
+            file_resource = FileResource(filename, data=resource.data)
+            self.resources.remove(resource)
+            self.resources.insert(0, file_resource)
+            self._unembed_glb(filename)
+            return file_resource
+        if isinstance(resource, ExternalResource):
+            # TODO: Maybe this should be allowed if exporting with save_file_resources set to False? In that case, we
+            # don't need access to ExternalResource data.
+            raise ValueError('ExternalResource may not be converted to a FileResource (accessing ExternalResource '
+                             'data is not yet supported.)')
+
+    def convert_to_base64_resource(self, resource: GLTFResource, mime_type: str = 'application/octet-stream')\
+            -> Base64Resource:
+        """
+        Converts a given GLTFResource to a Base64Resource.
+
+        If the resource is already a Base64Resource, no action is performed.
+
+        If the resource is a FileResource, then it will be converted to a Base64Resource. The data for the FileResource
+        will be loaded from disk if not already loaded (which may raise an IOError if the file does not exist).
+
+        If the resource is a GLBResource, it will be converted to a Base64Resource. The GLB buffer will be replaced with
+        a buffer with a data URI (or removed entirely if it is only used by images). Any images that refer to the
+        resource via a buffer view will instead refer to the image directly via a data URI, and the corresponding buffer
+        view will be removed (if it is not also referenced elsewhere). Further, if no other buffer views refer to the
+        same buffer as the removed buffer view, then the buffer will be removed entirely as well.
+
+        If the resource is an ExternalResource, this method will raise an error (accessing external resource data is not
+        supported).
+
+        :param resource: Resource to convert.
+        :param mime_type: MIME Type of the data (if known). Defaults to 'application/octet-stream'.
+        :return: Converted Base64Resource
+        """
+        if resource not in (self.resources or []):
+            raise RuntimeError(f'Resource with URI "{resource.uri}" was not found in the model.')
+        if isinstance(resource, FileResource):
+            resource.load()
+            base64_resource = Base64Resource(resource.data, mime_type)
+            self._update_model_resources_by_uri(resource.uri, base64_resource.uri)
+            i = self.resources.index(resource)
+            self.resources.pop(i)
+            self.resources.insert(i, base64_resource)
+            return base64_resource
+        if isinstance(resource, Base64Resource):
+            return resource
+        if isinstance(resource, GLBResource):
+            assert resource is self.get_glb_resource()
+            # Replace the GLB resource with a Base64Resource
+            base64_resource = Base64Resource(resource.data, mime_type)
+            self.resources.remove(resource)
+            self.resources.insert(0, base64_resource)
+            self._unembed_glb(base64_resource.uri)
+            return base64_resource
+        if isinstance(resource, ExternalResource):
+            raise ValueError('ExternalResource may not be converted to a Base64Resource (accessing ExternalResource '
+                             'data is not yet supported, and is necessary to generate the Data URI.)')
+
+    def convert_to_external_resource(self, resource: GLTFResource, uri: str) -> ExternalResource:
+        """
+        Converts a given GLTFResource to an ExternalResource with the given URI. Note that this library does not handle
+        calling out to external resources, so this is strictly a bookkeeping operation. It is the responsibility of the
+        caller to ensure that the resource exists externally. Note when converting a resource to an ExternalResource,
+        the resource data becomes inaccessible.
+
+        If the resource is already an ExternalResource and the URI matches, no action is performed. If the URI is
+        different, then the URI will be updated on the resource instance as well as on any corresponding buffers or
+        images in the model.
+
+        If the resource is a FileResource or Base64Resource, then it will be converted to an ExternalResource, and all
+        buffers and images will be updated appropriately.
+
+        If the resource is a GLBResource, it will be converted to an ExternalResource. The GLB buffer will be replaced
+        with a buffer with a data URI (or removed entirely if it is only used by images). Any images that refer to the
+        resource via a buffer view will instead refer to the image directly via a data URI, and the corresponding buffer
+        view will be removed (if it is not also referenced elsewhere). Further, if no other buffer views refer to the
+        same buffer as the removed buffer view, then the buffer will be removed entirely as well.
+
+        :param resource: Resource to convert.
+        :param uri: Resource URI
+        :return: Converted Base64Resource
+        """
+        if resource not in (self.resources or []):
+            raise RuntimeError(f'Resource with URI "{resource.uri}" was not found in the model.')
+        if isinstance(resource, FileResource) or isinstance(resource, Base64Resource):
+            external_resource = ExternalResource(uri)
+            self._update_model_resources_by_uri(resource.uri, uri)
+            i = self.resources.index(resource)
+            self.resources.pop(i)
+            self.resources.insert(i, external_resource)
+            return external_resource
+        if isinstance(resource, GLBResource):
+            assert resource is self.get_glb_resource()
+            # Replace the GLB resource with an external resource
+            external_resource = ExternalResource(uri)
+            self.resources.remove(resource)
+            self.resources.insert(0, external_resource)
+            self._unembed_glb(uri)
+            return external_resource
+        if isinstance(resource, ExternalResource):
+            if resource.uri == uri:
+                return resource
+            self._update_model_resources_by_uri(resource.uri, uri)
+            resource.uri = uri
+            return resource
 
     def _load_resources(self, basepath: str, autoload=False) -> None:
         self.resources = self.resources or []
@@ -334,6 +414,63 @@ class GLTF:
         resource = GLBResource(b, chunk_type)
         self.resources.append(resource)
 
+    def _export_gltf(self, filename: str, save_file_resources=True) -> None:
+        if any(isinstance(resource, GLBResource) for resource in (self.resources or [])):
+            raise TypeError("Model may not contain resources of type GLBResource when exporting to GLTF. "
+                            "Convert the GLBResource to a FileResource, Base64Resource, or ExternalResource using the "
+                            "provided helper methods in this class (GLTF.convert_to_file_resource,"
+                            "GLTF.convert_to_base64_resource, or GLTF.convert_to_external_resource) prior to "
+                            "exporting to GLTF, or export to GLB instead.")
+        data = self.model.to_json()
+        with open(filename, 'w') as f:
+            f.write(data)
+        if save_file_resources:
+            self._validate_resources()
+            basepath = path.dirname(filename)
+            self._export_file_resources(basepath)
+
+    def _export_glb(self, filename: str, embed_buffer_resources=True, embed_image_resources=True,
+                    save_file_resources=True) -> None:
+        if embed_buffer_resources:
+            self._embed_buffer_resources()
+        if embed_image_resources:
+            self._embed_image_resources()
+        with open(filename, 'wb') as f:
+            self._write_glb(f)
+        if save_file_resources:
+            self._validate_resources()
+            basepath = path.dirname(filename)
+            self._export_file_resources(basepath)
+
+    def _get_resource_uris_from_model(self) -> Set:
+        uris = set()
+        if self.model.buffers is not None:
+            uris.update([buffer.uri for buffer in self.model.buffers if buffer.uri is not None])
+        if self.model.images is not None:
+            uris.update([image.uri for image in self.model.images
+                         if image.uri is not None and image.bufferView is None])
+        return uris
+
+    def _get_buffers_by_uri(self, uri) -> Iterator[Tuple[int, Buffer]]:
+        if self.model.buffers is None:
+            return
+        for i, buffer in enumerate(self.model.buffers):
+            if buffer.uri == uri:
+                yield i, buffer
+
+    def _get_images_by_uri(self, uri) -> Iterator[Tuple[int, Image]]:
+        if self.model.images is None:
+            return
+        for i, image in enumerate(self.model.images):
+            if image.uri == uri:
+                yield i, image
+
+    def _update_model_resources_by_uri(self, old_uri: str, new_uri: str) -> None:
+        for _, buffer in self._get_buffers_by_uri(old_uri):
+            buffer.uri = new_uri
+        for _, image in self._get_images_by_uri(old_uri):
+            image.uri = new_uri
+
     def _write_glb(self, f: BinaryIO):
         self._prepare_glb()
         self._write_glb_header(f)
@@ -391,16 +528,16 @@ class GLTF:
                 if isinstance(resource, FileResource) and resource.mimetype:
                     image.mimeType = resource.mimetype
 
-    def _get_or_create_glb_buffer(self):
+    def _get_glb_buffer(self):
+        """
+        Returns the GLB buffer if present. The GLB buffer must be the first in the list, and have its URI undefined.
+        """
         if self.model.buffers is None or len(self.model.buffers) == 0:
             # There are no buffers in the model yet. Ensure there are no buffer views, as that would indicate an error.
             if self.model.bufferViews is not None and len(self.model.bufferViews) > 0:
-                raise RuntimeError(f'Model contains a buffer view without a buffer. This is not valid and indicates '
-                                   f'the model is likely corrupt.')
-            # Create a GLB buffer
-            buffer = Buffer(byteLength=0)
-            self.model.buffers = [buffer]
-            return buffer
+                raise RuntimeError('Model contains a buffer view without a buffer. This is not valid and indicates '
+                                   'the model is likely corrupt.')
+            return None
         first_buffer = self.model.buffers[0]
         if first_buffer.uri is None:
             # Validate all other buffers have a uri defined. Per the spec, the GLB embedded buffer must be the first in
@@ -411,14 +548,22 @@ class GLTF:
                                   f'list. This is not valid per the specification. The GLB-stored buffer must be the '
                                   f'first buffer in the buffers array.', RuntimeWarning)
             return first_buffer
-        # Create a GLB-stored buffer with an undefined URI and insert it as the first buffer in the list.
-        buffer = Buffer(byteLength=0)
-        self.model.buffers.insert(0, buffer)
+        return None
+
+    def _get_or_create_glb_buffer(self):
+        glb_buffer = self._get_glb_buffer()
+        if glb_buffer is not None:
+            return glb_buffer
+        # Create a GLB buffer
+        if self.model.buffers is None:
+            self.model.buffers = []
+        glb_buffer = Buffer(byteLength=0)
+        self.model.buffers.insert(0, glb_buffer)
         # Increment the buffer index on all existing buffer views by 1 to account for the newly-inserted buffer.
         if self.model.bufferViews is not None:
             for buffer_view in self.model.bufferViews:
                 buffer_view.buffer += 1
-        return buffer
+        return glb_buffer
 
     def _create_or_extend_glb_resource(self, data: bytearray) -> (GLBResource, int, int):
         bytelen = len(data)
@@ -457,6 +602,127 @@ class GLTF:
             return 0
         self.model.bufferViews.append(buffer_view)
         return len(self.model.bufferViews) - 1
+
+    def _update_model_after_embedding_resource(self, resource: GLTFResource, offset: int, bytelen: int):
+        if self.model.buffers is not None:
+            enumerated_buffers = list(enumerate(self.model.buffers))
+            for i, buffer in enumerated_buffers:
+                if buffer.uri == resource.uri:
+                    # Remove the buffer since it is now embedded
+                    self.model.buffers.remove(buffer)
+                    # Update any buffers views that point to this buffer
+                    self._update_buffer_views_after_embedding_resource(i, offset)
+                    # Decrement the buffer index on any buffer views that come after the removed buffer
+                    if self.model.bufferViews is not None:
+                        for buffer_view in self.model.bufferViews:
+                            if buffer_view.buffer > i:
+                                buffer_view.buffer -= 1
+        if self.model.images is not None:
+            for i, image in enumerate(self.model.images):
+                if image.uri == resource.uri:
+                    image.bufferView = self._create_embedded_image_buffer_view(offset, bytelen)
+                    # If the resource is a Base64 resource, then delete the image URI so we're not representing the
+                    # data twice, and preserve the MIME type.
+                    if isinstance(resource, Base64Resource):
+                        image.uri = None
+                        image.mimeType = resource.mime_type
+
+    def _update_buffer_views_after_embedding_resource(self, buffer_index: int, offset: int):
+        if self.model.bufferViews is not None:
+            for buffer_view in self.model.bufferViews:
+                if buffer_view.buffer == buffer_index:
+                    buffer_view.buffer = 0
+                    buffer_view.byteOffset += offset
+
+    def _unembed_glb(self, uri: str) -> None:
+        """
+        Replaces the GLB buffer with a regular buffer that has its URI set to a file or other external resource.
+        Any images that refered to the GLB buffer are updated to simply reference a URL, and their corresponding
+        buffer views are removed (if not referenced elsewhere). If the GLB buffer was only used by images, then it
+        is removed entirely (rather than replaced with another buffer), and any buffer indices in the remaining buffer
+        views are updated to reflect the removed buffer.
+        """
+        # Replace the GLB buffer with a regular buffer that has its URI set to the external file
+        glb_buffer = self._get_glb_buffer()
+        if glb_buffer is not None:
+            self.model.buffers.remove(glb_buffer)
+            buffer = Buffer(uri=uri, byteLength=glb_buffer.byteLength)
+            self.model.buffers.insert(0, buffer)
+            # Find all buffer views that refer to the GLB buffer
+            buffer_view_indices = set()
+            enumerated_buffer_views = list(enumerate(self.model.bufferViews or []))
+            for i, buffer_view in enumerated_buffer_views:
+                if buffer_view.buffer == 0:
+                    buffer_view_indices.add(i)
+            # Check if any of the buffers views that refer to the GLB buffer are referenced by anything other than
+            # images. If the buffer view is only used by images, then we can set the URI on the image directly and
+            # get rid of the buffer views entirely. Otherwise, we must keep the buffer view intact, and have the
+            # image continue to reference the buffer view. Currently, the only entities that refer to buffer views
+            # (other than images) are accessors (as well as their corresponding "sparse" sub-properties). It is
+            # unlikely that both an image and an accessor would both reference the same buffer view, but in case
+            # it does, we do not want to corrupt the model by removing a buffer view that is being referenced
+            # elsewhere.
+            accessor_buffer_view_indices = self._get_buffer_view_indices_used_by_accessors()
+            if buffer_view_indices & accessor_buffer_view_indices:
+                # Buffer view indices are in use by accessors, so must keep everything intact. Nothing more to do.
+                return
+            # Buffer views only used by images, so the buffer and the corresponding buffer views can be removed.
+            # First remove the buffer and update the buffer indices on all remaining buffer views to account for the
+            # removed buffer.
+            self.model.buffers.pop(0)
+            for buffer_view in (self.model.bufferViews or []):
+                if buffer_view.buffer > 0:
+                    buffer_view.buffer -= 1
+            # Find all images that reference the removed buffer views and update their URIs.
+            for image in (self.model.images or []):
+                if image.bufferView in buffer_view_indices:
+                    image.bufferView = None
+                    image.uri = uri
+            # Now remove the buffer views that referred to the GLB buffer. Any accessors and images that reference a
+            # buffer view after the one that was removed need to be updated.
+            self._remove_buffer_views_by_indices(buffer_view_indices)
+
+    def _get_buffer_view_indices_used_by_accessors(self) -> Set:
+        """
+        Returns the unique set of buffer view indices that are referenced by accessors (or their sparse counterparts).
+        """
+        buffer_view_indices = set()
+        for accessor in (self.model.accessors or []):
+            if accessor.bufferView is not None:
+                buffer_view_indices.add(accessor.bufferView)
+            if accessor.sparse is not None:
+                if accessor.sparse.indices is not None and accessor.sparse.indices.bufferView is not None:
+                    buffer_view_indices.add(accessor.sparse.indices.bufferView)
+                if accessor.sparse.values is not None and accessor.sparse.values.bufferView is not None:
+                    buffer_view_indices.add(accessor.sparse.values.bufferView)
+        return buffer_view_indices
+
+    def _remove_buffer_views_by_indices(self, indices: Iterable[int]) -> None:
+        for i in sorted(indices, reverse=True):
+            self._remove_buffer_view_by_index(i)
+
+    def _remove_buffer_view_by_index(self, i: int) -> None:
+        """
+        Removes a buffer view from the model by index. Assumes the model has buffer views and the index is valid, and
+        that the buffer view is not being referenced by any other parts of the model (i.e., accessors or images).
+        When removing multiple buffer view indices, care must be taken to remove the indices in descending order
+        (i.e., if removing buffer views with indices [2,3,5], this method should be called first with 5, then with 3,
+        then with 2).
+        """
+        self.model.bufferViews.pop(i)
+        for accessor in (self.model.accessors or []):
+            if accessor.bufferView > i:
+                accessor.bufferView -= 1
+            if accessor.sparse is not None:
+                accessor_indices = accessor.sparse.indices
+                if accessor_indices is not None and accessor_indices.bufferView > i:
+                    accessor_indices.bufferView -= 1
+                accessor_values = accessor.sparse.values
+                if accessor_values is not None and accessor_values.bufferView > i:
+                    accessor_values.bufferView -= 1
+        for image in (self.model.images or []):
+            if image.bufferView is not None and image.bufferView > i:
+                image.bufferView -= 1
 
 
 def _get_resource(uri, basepath: str, autoload=False) -> Optional[GLTFResource]:

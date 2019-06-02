@@ -5,8 +5,8 @@ import base64
 from os import path
 from unittest import TestCase
 from gltflib import (
-    GLTF, GLTFModel, Asset, FileResource, ExternalResource, Buffer, BufferView, Image, GLBResource, Base64Resource,
-    GLB_BINARY_CHUNK_TYPE)
+    GLTF, GLTFModel, Accessor, Asset, FileResource, ExternalResource, Buffer, BufferView, Image, GLBResource,
+    Base64Resource, GLB_BINARY_CHUNK_TYPE, Sparse, SparseIndices, SparseValues)
 
 
 # Temporary directory used for tests
@@ -1451,6 +1451,711 @@ class TestGLTF(TestCase):
         with self.assertRaises(ValueError):
             _ = resource.data
 
+    def test_convert_to_file_resource_does_nothing_if_resource_is_already_file_resource_and_uri_matches(self):
+        """
+        Ensures GLTF.convert_to_file_resource does nothing if the resource is already a FileResource with the same URI.
+        """
+        # Arrange
+        data = b'sample binary data'
+        bytelen = len(data)
+        resource = FileResource('buffer.bin', data=data)
+        model = GLTFModel(asset=Asset(version='2.0'), buffers=[Buffer(uri='buffer.bin', byteLength=bytelen)])
+        gltf = GLTF(model=model, resources=[resource])
 
-# TODO:
-#  - Add ability to convert between FileResource, Base64Resource, and GLBResource
+        # Act
+        converted_resource = gltf.convert_to_file_resource(resource, 'buffer.bin')
+
+        # Assert
+        self.assertIs(resource, converted_resource)
+        self.assertIsInstance(converted_resource, FileResource)
+        self.assertEqual('buffer.bin', converted_resource.filename)
+        self.assertEqual('buffer.bin', gltf.model.buffers[0].uri)
+
+    def test_convert_to_file_resource_updates_uri_if_resource_is_already_file_resource_and_uri_is_different(self):
+        """
+        Ensures GLTF.convert_to_file_resource updates the filename on all buffers and images that reference the
+        URI if the resource is already a FileResource but the URI is different.
+        """
+        # Arrange
+        # Binary resource
+        binary_data = b'sample binary data'
+        binary_data_bytelen = len(binary_data)
+        binary_data_old_uri = 'buffer.bin'
+        binary_data_new_uri = 'buffer_updated.bin'
+        binary_resource = FileResource(binary_data_old_uri, data=binary_data)
+        # Image resource
+        image_data = b'sample image data'
+        image_old_uri = 'image.png'
+        image_new_uri = 'image_updated.png'
+        image_resource = FileResource(image_old_uri, data=image_data)
+        # Model
+        model = GLTFModel(
+            asset=Asset(version='2.0'),
+            buffers=[Buffer(uri=binary_data_old_uri, byteLength=binary_data_bytelen)],
+            images=[Image(uri=image_old_uri, mimeType='image/png')])
+        gltf = GLTF(model=model, resources=[binary_resource, image_resource])
+
+        # Act
+        converted_binary_resource = gltf.convert_to_file_resource(binary_resource, binary_data_new_uri)
+        converted_image_resource = gltf.convert_to_file_resource(image_resource, image_new_uri)
+
+        # Assert
+        # Ensure there are still 2 resources
+        self.assertEqual(2, len(gltf.resources))
+        self.assertTrue(converted_binary_resource in gltf.resources)
+        self.assertTrue(converted_image_resource in gltf.resources)
+        # Ensure both resource are still FileResource instances
+        self.assertIsInstance(converted_binary_resource, FileResource)
+        self.assertIsInstance(converted_image_resource, FileResource)
+        # Ensure resource URIs are updated
+        self.assertEqual(binary_data_new_uri, converted_binary_resource.filename)
+        self.assertEqual(image_new_uri, converted_image_resource.filename)
+        # Ensure buffers and images are updated with new URIs
+        self.assertEqual(binary_data_new_uri, gltf.model.buffers[0].uri)
+        self.assertEqual(image_new_uri, gltf.model.images[0].uri)
+
+    def test_convert_base64_resource_to_file_resource(self):
+        """Ensures GLTF.convert_to_file_resource can convert a Base64Resource to a FileResource"""
+        # Arrange
+        data = b'sample binary data'
+        bytelen = len(data)
+        base64_resource = Base64Resource(data, 'application/octet-stream')
+        model = GLTFModel(asset=Asset(version='2.0'), buffers=[Buffer(uri=base64_resource.uri, byteLength=bytelen)])
+        gltf = GLTF(model=model, resources=[base64_resource])
+        exported_uri = 'test_convert_base64_resource_to_file_resource.bin'
+
+        # Act
+        converted_resource = gltf.convert_to_file_resource(base64_resource, exported_uri)
+
+        # Assert
+        self.assertEqual(1, len(gltf.resources))
+        self.assertIsInstance(converted_resource, FileResource)
+        self.assertEqual(exported_uri, converted_resource.filename)
+        self.assertEqual(exported_uri, gltf.model.buffers[0].uri)
+        # File should not be created until model is saved
+        self.assertFalse(path.exists(exported_uri))
+
+    def test_convert_glb_resource_to_file_resource(self):
+        """Ensures GLTF.convert_to_file_resource can convert a GLBResource to a FileResource"""
+        # Arrange
+        gltf = GLTF.load(sample('BoxTextured/glb/BoxTextured.glb'))
+        # Ensure there is 1 resource to begin with
+        self.assertEqual(1, len(gltf.resources))
+        glb_resource = gltf.get_glb_resource()
+        uri = 'test_convert_glb_resource_to_file_resource.bin'
+
+        # Act
+        converted_resource = gltf.convert_to_file_resource(glb_resource, uri)
+
+        # Assert
+        # GLB resource should no longer exist since it was converted and nothing should refer to it anymore
+        self.assertIsNone(gltf.get_glb_resource())
+        # There should now be a single FileResource
+        self.assertEqual(1, len(gltf.resources))
+        self.assertIsInstance(converted_resource, FileResource)
+        self.assertEqual(uri, converted_resource.filename)
+        self.assertEqual(uri, converted_resource.uri)
+        # There should be 1 buffer, and it should have its URI defined (the old GLB buffer should no longer be present)
+        self.assertEqual(1, len(gltf.model.buffers))
+        buffer = gltf.model.buffers[0]
+        self.assertEqual(uri, buffer.uri)
+        # Byte length should be preserved on both the buffer and FileResource
+        self.assertEqual(24360, buffer.byteLength)
+        self.assertEqual(24360, len(converted_resource.data))
+
+    def test_convert_external_resource_to_file_resource_should_raise_error(self):
+        """
+        Ensures GLTF.convert_to_file_resource raises an error when attempting to convert an ExternalResource to a
+        FileResource (loading external data is not supported for now)
+        """
+        # Arrange
+        image_uri = 'http://www.example.com/image.jpg'
+        data_uri = 'http://www.example.com/data.bin'
+        gltf = GLTF.load(sample('External/external.gltf'))
+        image_resource = next(r for r in gltf.resources if r.uri == image_uri)
+        data_resource = next(r for r in gltf.resources if r.uri == data_uri)
+
+        # Act/Assert
+        with self.assertRaises(ValueError):
+            _ = gltf.convert_to_file_resource(image_resource, 'image.png')
+        with self.assertRaises(ValueError):
+            _ = gltf.convert_to_file_resource(data_resource, 'data.bin')
+
+    def test_convert_to_file_resource_raises_error_if_resource_is_not_in_model(self):
+        """Ensures GLTF.convert_to_file_resource raises an error if the resource is not part of the model."""
+        # Arrange
+        data = b'sample binary data'
+        bytelen = len(data)
+        resource = FileResource('buffer.bin', data=data)
+        model = GLTFModel(asset=Asset(version='2.0'), buffers=[Buffer(uri='buffer.bin', byteLength=bytelen)])
+        gltf = GLTF(model=model, resources=[])
+
+        # Act/Assert
+        with self.assertRaises(RuntimeError):
+            _ = gltf.convert_to_file_resource(resource, 'buffer.bin')
+
+    def test_convert_to_base64_resource_does_nothing_if_resource_is_already_base64_resource(self):
+        """Ensures GLTF.convert_to_base64_resource does nothing if the resource is already a Base64Resource"""
+        # Arrage
+        data = b'sample binary data'
+        bytelen = len(data)
+        base64_resource = Base64Resource(data, 'application/octet-stream')
+        model = GLTFModel(asset=Asset(version='2.0'), buffers=[Buffer(uri=base64_resource.uri, byteLength=bytelen)])
+        gltf = GLTF(model=model, resources=[base64_resource])
+
+        # Act
+        converted_resource = gltf.convert_to_base64_resource(base64_resource)
+
+        # Assert
+        self.assertIs(converted_resource, base64_resource)
+        self.assertIsInstance(converted_resource, Base64Resource)
+        self.assertEqual(1, len(gltf.resources))
+        self.assertEqual(base64_resource.uri, gltf.model.buffers[0].uri)
+
+    def test_convert_file_resource_to_base64(self):
+        """Ensures GLTF.convert_to_base64_resource can convert a FileResource to a Base64Resource"""
+        # Arrage
+        data = b'sample binary data'
+        bytelen = len(data)
+        file_resource = FileResource('sample.bin', data=data, mimetype='application/octet-stream')
+        model = GLTFModel(asset=Asset(version='2.0'), buffers=[Buffer(uri=file_resource.uri, byteLength=bytelen)])
+        gltf = GLTF(model=model, resources=[file_resource])
+
+        # Act
+        converted_resource = gltf.convert_to_base64_resource(file_resource)
+
+        # Assert
+        self.assertIsInstance(converted_resource, Base64Resource)
+        self.assertEqual(1, len(gltf.resources))
+        resource = gltf.resources[0]
+        self.assertIs(resource, converted_resource)
+        self.assertEqual('data:application/octet-stream;base64,c2FtcGxlIGJpbmFyeSBkYXRh', gltf.model.buffers[0].uri)
+
+    def test_convert_file_resource_to_base64_loads_file_resource_if_not_loaded(self):
+        """
+        Ensures GLTF.convert_to_base64_resource loads the FileResource when converting to a Base64Resource if the
+        FileResource was not initially loaded.
+        """
+        # Arrange
+        gltf = GLTF.load(sample('TriangleWithoutIndices/TriangleWithoutIndices.gltf'), load_file_resources=False)
+        file_resource = gltf.get_resource('triangleWithoutIndices.bin')
+        self.assertIsInstance(file_resource, FileResource)
+        self.assertFalse(file_resource.loaded)
+
+        # Act
+        gltf.convert_to_base64_resource(file_resource)
+
+        # Assert
+        self.assertTrue(file_resource.loaded)
+
+    def test_convert_image_file_resource_to_base64_updates_image_uri(self):
+        """Ensures when converting a FileResource to a Base64Resource, the URI is updated on the image directly."""
+        # Arrange
+        image_uri = 'sample.png'
+        image_data = b'sample image data'
+        image_resource = FileResource(image_uri, data=image_data)
+        model = GLTFModel(asset=Asset(version='2.0'), images=[Image(uri=image_uri)])
+        gltf = GLTF(model=model, resources=[image_resource])
+
+        # Act
+        converted_resource = gltf.convert_to_base64_resource(image_resource, 'image/png')
+
+        # Assert
+        self.assertEqual(1, len(gltf.resources))
+        resource = gltf.resources[0]
+        self.assertIsInstance(resource, Base64Resource)
+        self.assertIs(converted_resource, resource)
+        self.assertEqual('data:image/png;base64,c2FtcGxlIGltYWdlIGRhdGE=', resource.uri)
+        self.assertEqual('data:image/png;base64,c2FtcGxlIGltYWdlIGRhdGE=', gltf.model.images[0].uri)
+        self.assertEqual('image/png', resource.mime_type)
+
+    def test_convert_glb_resource_to_base64(self):
+        """Ensures GLTF.convert_to_base64_resource can convert a GLBResource to a Base64Resource"""
+        # Arrange
+        model = GLTFModel(
+            asset=Asset(version='2.0'),
+            buffers=[Buffer(byteLength=4)],
+            bufferViews=[BufferView(buffer=0)],
+            accessors=[Accessor(bufferView=0)]
+        )
+        glb_resource = GLBResource(b'data')
+        gltf = GLTF(model=model, resources=[glb_resource])
+
+        # Act
+        converted_resource = gltf.convert_to_base64_resource(glb_resource)
+
+        # Assert
+        self.assertEqual(1, len(gltf.resources))
+        resource = gltf.resources[0]
+        self.assertIs(resource, converted_resource)
+        self.assertIsInstance(resource, Base64Resource)
+        self.assertEqual('data:application/octet-stream;base64,ZGF0YQ==', resource.uri)
+        self.assertEqual('data:application/octet-stream;base64,ZGF0YQ==', model.buffers[0].uri)
+        self.assertEqual(b'data', resource.data)
+
+    def test_convert_glb_resource_to_base64_updates_image_uri_and_removes_buffer_view_for_embedded_images(self):
+        """
+        Ensures when converting a GLBResource containing an image to a Base64Resource, the image URI is updated and
+        the corresponding buffer view is removed (if not referenced elsewhere). Indices for other buffer views are
+        updated appropriately.
+        """
+        # Arrange
+        # Image data and GLB resource
+        image_data = b'sample image data'
+        image_bytelen = len(image_data)
+        # GLB Resource
+        glb_resource = GLBResource(image_data)
+        # Another external file resource containing other data
+        binary_data = b'sample binary data'
+        binary_data_bytelen = len(binary_data)
+        file_resource_uri = 'sample.bin'
+        file_resource = FileResource(file_resource_uri, data=binary_data)
+        # Create model
+        model = GLTFModel(
+            asset=Asset(version='2.0'),
+            accessors=[
+                Accessor(bufferView=0, componentType=999, count=1, type='foo'),
+                Accessor(bufferView=2, componentType=999, count=1, type='bar',
+                         sparse=Sparse(count=1, indices=SparseIndices(bufferView=3, byteOffset=0, componentType=1),
+                                       values=SparseValues(bufferView=4, byteOffset=0)))
+            ],
+            buffers=[
+                Buffer(byteLength=image_bytelen),
+                Buffer(uri=file_resource_uri, byteLength=binary_data_bytelen)
+            ],
+            bufferViews=[
+                BufferView(buffer=1, byteOffset=0, byteLength=6),
+                BufferView(buffer=0, byteOffset=0, byteLength=image_bytelen),
+                BufferView(buffer=1, byteOffset=6, byteLength=4),
+                BufferView(buffer=1, byteOffset=10, byteLength=6),
+                BufferView(buffer=1, byteOffset=16, byteLength=2)
+            ],
+            images=[
+                Image(bufferView=1, mimeType='image/png'),
+                Image(bufferView=3, mimeType='image/png')
+            ])
+        gltf = GLTF(model=model, resources=[glb_resource, file_resource])
+
+        # Act
+        converted_resource = gltf.convert_to_base64_resource(glb_resource)
+
+        # Assert
+        # There should be 2 resources, the converted Base64Resource and the original FileResource
+        self.assertEqual(2, len(gltf.resources))
+        self.assertTrue(file_resource in gltf.resources)
+        base64_resource = next((r for r in gltf.resources if isinstance(r, Base64Resource)), None)
+        self.assertIsNotNone(base64_resource)
+        self.assertIsInstance(base64_resource, Base64Resource)
+        self.assertIs(converted_resource, base64_resource)
+        # Ensure Base64Resource URI is correct
+        self.assertEqual(b'sample image data', base64_resource.data)
+        self.assertEqual('data:application/octet-stream;base64,c2FtcGxlIGltYWdlIGRhdGE=', base64_resource.uri)
+        # There should now be one buffer for the external file resource
+        self.assertEqual(1, len(gltf.model.buffers))
+        self.assertEqual(Buffer(uri=file_resource_uri, byteLength=binary_data_bytelen), gltf.model.buffers[0])
+        # There should now be 4 buffer views (the buffer view for the image should be removed). The remaining ones
+        # should have the buffer index changed to reflect the removed buffer.
+        self.assertEqual([
+            BufferView(buffer=0, byteOffset=0, byteLength=6),
+            BufferView(buffer=0, byteOffset=6, byteLength=4),
+            BufferView(buffer=0, byteOffset=10, byteLength=6),
+            BufferView(buffer=0, byteOffset=16, byteLength=2)
+        ], gltf.model.bufferViews)
+        # Image should now have a data URI instead of referencing a buffer view
+        self.assertEqual('data:application/octet-stream;base64,c2FtcGxlIGltYWdlIGRhdGE=', gltf.model.images[0].uri)
+        self.assertIsNone(gltf.model.images[0].bufferView)
+        # Accessors that reference a buffer view after the one that was removed should have their indices updated
+        self.assertEqual([
+            Accessor(bufferView=0, componentType=999, count=1, type='foo'),
+            Accessor(bufferView=1, componentType=999, count=1, type='bar',
+                     sparse=Sparse(count=1, indices=SparseIndices(bufferView=2, byteOffset=0, componentType=1),
+                                   values=SparseValues(bufferView=3, byteOffset=0)))
+        ], gltf.model.accessors)
+        # Images that reference a buffer view after the one that was removed should have their indices updated
+        self.assertEqual(2, gltf.model.images[1].bufferView)
+
+    def test_convert_glb_resource_to_base64_leaves_buffer_view_if_referenced_elsewhere(self):
+        """
+        Ensures when converting a GLBResource containing an image to a Base64Resource, the corresponding buffer view for
+        the image is retained if it is referenced elsewhere.
+        """
+        # Arrange
+        # Image data and GLB resource
+        image_data = b'sample image data'
+        image_bytelen = len(image_data)
+        # GLB Resource
+        glb_resource = GLBResource(image_data)
+        # Another external file resource containing other data
+        binary_data = b'sample binary data'
+        binary_data_bytelen = len(binary_data)
+        file_resource_uri = 'sample.bin'
+        file_resource = FileResource(file_resource_uri, data=binary_data)
+        # Create model. Note accessor references the same buffer view as embedded image. Maybe not a very realistic
+        # scenario, but in this case the buffer view should be retained when the image is converted.
+        model = GLTFModel(
+            asset=Asset(version='2.0'),
+            accessors=[
+                Accessor(bufferView=1, componentType=999, count=1, type='foo')
+            ],
+            buffers=[
+                Buffer(byteLength=image_bytelen),
+                Buffer(uri=file_resource_uri, byteLength=binary_data_bytelen)
+            ],
+            bufferViews=[
+                BufferView(buffer=1, byteOffset=0, byteLength=6),
+                BufferView(buffer=0, byteOffset=0, byteLength=image_bytelen)
+            ],
+            images=[
+                Image(bufferView=1, mimeType='image/png')
+            ])
+        gltf = GLTF(model=model, resources=[glb_resource, file_resource])
+
+        # Act
+        converted_resource = gltf.convert_to_base64_resource(glb_resource)
+
+        # Assert
+        # There should be 2 resources, the converted Base64Resource and the original FileResource
+        self.assertEqual(2, len(gltf.resources))
+        self.assertTrue(file_resource in gltf.resources)
+        base64_resource = next((r for r in gltf.resources if isinstance(r, Base64Resource)), None)
+        self.assertIsNotNone(base64_resource)
+        self.assertIsInstance(base64_resource, Base64Resource)
+        self.assertIs(converted_resource, base64_resource)
+        # Ensure Base64Resource URI is correct
+        self.assertEqual(b'sample image data', base64_resource.data)
+        expected_uri = 'data:application/octet-stream;base64,c2FtcGxlIGltYWdlIGRhdGE='
+        self.assertEqual(expected_uri, base64_resource.uri)
+        # There should be two buffers, one that now has Base64 data URI, and another for file resource that wasn't
+        # converted.
+        self.assertEqual(2, len(gltf.model.buffers))
+        self.assertEqual(Buffer(uri=expected_uri, byteLength=image_bytelen), gltf.model.buffers[0])
+        self.assertEqual(Buffer(uri=file_resource_uri, byteLength=binary_data_bytelen), gltf.model.buffers[1])
+        # There should still be 2 buffer views (i.e., the buffer view for the image should NOT be removed in this case
+        # since it is also referenced by an accessor)
+        self.assertEqual([
+            BufferView(buffer=1, byteOffset=0, byteLength=6),
+            BufferView(buffer=0, byteOffset=0, byteLength=image_bytelen)
+        ], gltf.model.bufferViews)
+        # Image should continue to reference the buffer view since it wasn't removed
+        self.assertIsNone(gltf.model.images[0].uri)
+        self.assertEqual(1, gltf.model.images[0].bufferView)
+        # Accessors should be retained (buffer views indices should not be updated since no buffer views were removed)
+        self.assertEqual(1, len(gltf.model.accessors))
+        self.assertEqual(Accessor(bufferView=1, componentType=999, count=1, type='foo'), gltf.model.accessors[0])
+
+    def test_convert_external_resource_to_base64_resource_should_raise_error(self):
+        """
+        Ensures GLTF.convert_to_base64_resource raises an error when attempting to convert an ExternalResource to a
+        Base64Resource (loading external data is not supported for now)
+        """
+        # Arrange
+        image_uri = 'http://www.example.com/image.jpg'
+        data_uri = 'http://www.example.com/data.bin'
+        gltf = GLTF.load(sample('External/external.gltf'))
+        image_resource = next(r for r in gltf.resources if r.uri == image_uri)
+        data_resource = next(r for r in gltf.resources if r.uri == data_uri)
+
+        # Act/Assert
+        with self.assertRaises(ValueError):
+            _ = gltf.convert_to_base64_resource(image_resource)
+        with self.assertRaises(ValueError):
+            _ = gltf.convert_to_base64_resource(data_resource)
+
+    def test_convert_to_base64_resource_raises_error_if_resource_is_not_in_model(self):
+        """Ensures GLTF.convert_to_base64_resource raises an error if the resource is not part of the model."""
+        # Arrange
+        data = b'sample binary data'
+        bytelen = len(data)
+        resource = FileResource('buffer.bin', data=data)
+        model = GLTFModel(asset=Asset(version='2.0'), buffers=[Buffer(uri='buffer.bin', byteLength=bytelen)])
+        gltf = GLTF(model=model, resources=[])
+
+        # Act/Assert
+        with self.assertRaises(RuntimeError):
+            _ = gltf.convert_to_base64_resource(resource, 'buffer.bin')
+
+    def test_convert_to_external_resource_does_nothing_if_resource_is_already_external_resource_and_uri_matches(self):
+        """
+        Ensures GLTF.convert_to_external_resource does nothing if the resource is already an ExternalResource with the
+        same URI.
+        """
+        # Arrange
+        uri = 'http://www.example.com/data.bin'
+        resource = ExternalResource('http://www.example.com/data.bin')
+        model = GLTFModel(asset=Asset(version='2.0'), buffers=[Buffer(uri=uri, byteLength=123)])
+        gltf = GLTF(model=model, resources=[resource])
+
+        # Act
+        converted_resource = gltf.convert_to_external_resource(resource, uri)
+
+        # Assert
+        self.assertIs(resource, converted_resource)
+        self.assertIsInstance(converted_resource, ExternalResource)
+        self.assertEqual(uri, converted_resource.uri)
+        self.assertEqual(uri, gltf.model.buffers[0].uri)
+
+    def test_convert_to_external_resource_updates_uri_if_resource_is_already_file_resource_and_uri_is_different(self):
+        """
+        Ensures GLTF.convert_to_external_resource updates the URI on all buffers and images that reference the
+        URI if the resource is already an ExternalResource but the URI is different.
+        """
+        # Arrange
+        # Binary resource
+        binary_data_old_uri = 'http://www.example.com/data.bin'
+        binary_data_new_uri = 'http://www.example.com/data_updated.bin'
+        binary_resource = ExternalResource(binary_data_old_uri)
+        # Image resource
+        image_old_uri = 'http://www.example.com/image.png'
+        image_new_uri = 'http://www.example.com/image_updated.png'
+        image_resource = ExternalResource(image_old_uri)
+        # Model
+        model = GLTFModel(
+            asset=Asset(version='2.0'),
+            buffers=[Buffer(uri=binary_data_old_uri, byteLength=123)],
+            images=[Image(uri=image_old_uri, mimeType='image/png')])
+        gltf = GLTF(model=model, resources=[binary_resource, image_resource])
+
+        # Act
+        converted_binary_resource = gltf.convert_to_external_resource(binary_resource, binary_data_new_uri)
+        converted_image_resource = gltf.convert_to_external_resource(image_resource, image_new_uri)
+
+        # Assert
+        # Ensure there are still 2 resources
+        self.assertEqual(2, len(gltf.resources))
+        self.assertTrue(converted_binary_resource in gltf.resources)
+        self.assertTrue(converted_image_resource in gltf.resources)
+        # Ensure both resource are still ExternalResource instances
+        self.assertIsInstance(converted_binary_resource, ExternalResource)
+        self.assertIsInstance(converted_image_resource, ExternalResource)
+        # Ensure resource URIs are updated
+        self.assertEqual(binary_data_new_uri, converted_binary_resource.uri)
+        self.assertEqual(image_new_uri, converted_image_resource.uri)
+        # Ensure buffers and images are updated with new URIs
+        self.assertEqual(binary_data_new_uri, gltf.model.buffers[0].uri)
+        self.assertEqual(image_new_uri, gltf.model.images[0].uri)
+
+    def test_convert_image_file_resource_to_external(self):
+        """Ensures when converting a FileResource to an ExternalResource, the URI is updated on the image directly."""
+        # Arrange
+        image_filename = 'sample.png'
+        image_data = b'sample image data'
+        image_resource = FileResource(image_filename, data=image_data)
+        model = GLTFModel(asset=Asset(version='2.0'), images=[Image(uri=image_filename)])
+        gltf = GLTF(model=model, resources=[image_resource])
+
+        # Act
+        image_uri = 'http://www.example.com/image.png'
+        converted_resource = gltf.convert_to_external_resource(image_resource, image_uri)
+
+        # Assert
+        self.assertEqual(1, len(gltf.resources))
+        resource = gltf.resources[0]
+        self.assertIsInstance(resource, ExternalResource)
+        self.assertIs(converted_resource, resource)
+        self.assertEqual(image_uri, resource.uri)
+        self.assertEqual(image_uri, gltf.model.images[0].uri)
+
+    def test_convert_base64_resource_to_external(self):
+        """Ensures a Base64Resource can be converted to an ExternalResource"""
+        # Arrange
+        data = b'sample binary data'
+        bytelen = len(data)
+        base64_resource = Base64Resource(data, 'application/octet-stream')
+        model = GLTFModel(asset=Asset(version='2.0'), buffers=[Buffer(uri=base64_resource.uri, byteLength=bytelen)])
+        gltf = GLTF(model=model, resources=[base64_resource])
+
+        # Act
+        exported_uri = 'http://www.example.com/data.bin'
+        converted_resource = gltf.convert_to_external_resource(base64_resource, exported_uri)
+
+        # Assert
+        self.assertEqual(1, len(gltf.resources))
+        self.assertIsInstance(converted_resource, ExternalResource)
+        self.assertEqual(exported_uri, converted_resource.uri)
+        self.assertEqual(exported_uri, gltf.model.buffers[0].uri)
+
+    def test_convert_glb_resource_to_external(self):
+        """Ensures GLTF.convert_to_external_resource can convert a GLBResource to an ExternalResource"""
+        # Arrange
+        model = GLTFModel(
+            asset=Asset(version='2.0'),
+            buffers=[Buffer(byteLength=4)],
+            bufferViews=[BufferView(buffer=0)],
+            accessors=[Accessor(bufferView=0)]
+        )
+        glb_resource = GLBResource(b'data')
+        gltf = GLTF(model=model, resources=[glb_resource])
+
+        # Act
+        exported_uri = 'http://www.example.com/data.bin'
+        converted_resource = gltf.convert_to_external_resource(glb_resource, exported_uri)
+
+        # Assert
+        self.assertEqual(1, len(gltf.resources))
+        resource = gltf.resources[0]
+        self.assertIs(resource, converted_resource)
+        self.assertIsInstance(resource, ExternalResource)
+        self.assertEqual(exported_uri, resource.uri)
+        self.assertEqual(exported_uri, model.buffers[0].uri)
+
+    def test_convert_glb_resource_to_external_updates_image_uri_and_removes_buffer_view_for_embedded_images(self):
+        """
+        Ensures when converting a GLBResource containing an image to an ExternalResource, the image URI is updated and
+        the corresponding buffer view is removed (if not referenced elsewhere). Indices for other buffer views are
+        updated appropriately.
+        """
+        # Arrange
+        # Image data and GLB resource
+        image_data = b'sample image data'
+        image_bytelen = len(image_data)
+        # GLB Resource
+        glb_resource = GLBResource(image_data)
+        # Another external file resource containing other data
+        binary_data = b'sample binary data'
+        binary_data_bytelen = len(binary_data)
+        file_resource_uri = 'sample.bin'
+        file_resource = FileResource(file_resource_uri, data=binary_data)
+        # Create model
+        model = GLTFModel(
+            asset=Asset(version='2.0'),
+            accessors=[
+                Accessor(bufferView=0, componentType=999, count=1, type='foo'),
+                Accessor(bufferView=2, componentType=999, count=1, type='bar',
+                         sparse=Sparse(count=1, indices=SparseIndices(bufferView=3, byteOffset=0, componentType=1),
+                                       values=SparseValues(bufferView=4, byteOffset=0)))
+            ],
+            buffers=[
+                Buffer(byteLength=image_bytelen),
+                Buffer(uri=file_resource_uri, byteLength=binary_data_bytelen)
+            ],
+            bufferViews=[
+                BufferView(buffer=1, byteOffset=0, byteLength=6),
+                BufferView(buffer=0, byteOffset=0, byteLength=image_bytelen),
+                BufferView(buffer=1, byteOffset=6, byteLength=4),
+                BufferView(buffer=1, byteOffset=10, byteLength=6),
+                BufferView(buffer=1, byteOffset=16, byteLength=2)
+            ],
+            images=[
+                Image(bufferView=1, mimeType='image/png'),
+                Image(bufferView=3, mimeType='image/png')
+            ])
+        gltf = GLTF(model=model, resources=[glb_resource, file_resource])
+
+        # Act
+        exported_uri = 'http://www.example.com/data.bin'
+        converted_resource = gltf.convert_to_external_resource(glb_resource, exported_uri)
+
+        # Assert
+        # There should be 2 resources, the converted ExternalResource and the original FileResource
+        self.assertEqual(2, len(gltf.resources))
+        self.assertTrue(file_resource in gltf.resources)
+        external_resource = next((r for r in gltf.resources if isinstance(r, ExternalResource)), None)
+        self.assertIsNotNone(external_resource)
+        self.assertIsInstance(external_resource, ExternalResource)
+        self.assertIs(converted_resource, external_resource)
+        # Ensure ExternalResource URI is correct
+        self.assertEqual(exported_uri, external_resource.uri)
+        # There should now be one buffer for the external file resource
+        self.assertEqual(1, len(gltf.model.buffers))
+        self.assertEqual(Buffer(uri=file_resource_uri, byteLength=binary_data_bytelen), gltf.model.buffers[0])
+        # There should now be 4 buffer views (the buffer view for the image should be removed). The buffer index should
+        # be changed to 0 since the first buffer was removed.
+        self.assertEqual([
+            BufferView(buffer=0, byteOffset=0, byteLength=6),
+            BufferView(buffer=0, byteOffset=6, byteLength=4),
+            BufferView(buffer=0, byteOffset=10, byteLength=6),
+            BufferView(buffer=0, byteOffset=16, byteLength=2)
+        ], gltf.model.bufferViews)
+        # Image should now have an external URI instead of referencing a buffer view
+        self.assertEqual(exported_uri, gltf.model.images[0].uri)
+        self.assertIsNone(gltf.model.images[0].bufferView)
+        # Accessors that reference a buffer view after the one that was removed should have their indices updated
+        self.assertEqual([
+            Accessor(bufferView=0, componentType=999, count=1, type='foo'),
+            Accessor(bufferView=1, componentType=999, count=1, type='bar',
+                     sparse=Sparse(count=1, indices=SparseIndices(bufferView=2, byteOffset=0, componentType=1),
+                                   values=SparseValues(bufferView=3, byteOffset=0)))
+        ], gltf.model.accessors)
+        # Images that reference a buffer view after the one that was removed should have their indices updated
+        self.assertEqual(2, gltf.model.images[1].bufferView)
+
+    def test_convert_glb_resource_to_external_leaves_buffer_view_if_referenced_elsewhere(self):
+        """
+        Ensures when converting a GLBResource containing an image to an ExternalResource, the corresponding buffer view
+        for the image is retained if it is referenced elsewhere.
+        """
+        # Arrange
+        # Image data and GLB resource
+        image_data = b'sample image data'
+        image_bytelen = len(image_data)
+        # GLB Resource
+        glb_resource = GLBResource(image_data)
+        # Another external file resource containing other data
+        binary_data = b'sample binary data'
+        binary_data_bytelen = len(binary_data)
+        file_resource_uri = 'sample.bin'
+        file_resource = FileResource(file_resource_uri, data=binary_data)
+        # Create model. Note accessor references the same buffer view as embedded image. Maybe not a very realistic
+        # scenario, but in this case the buffer view should be retained when the image is converted.
+        model = GLTFModel(
+            asset=Asset(version='2.0'),
+            accessors=[
+                Accessor(bufferView=1, componentType=999, count=1, type='foo')
+            ],
+            buffers=[
+                Buffer(byteLength=image_bytelen),
+                Buffer(uri=file_resource_uri, byteLength=binary_data_bytelen)
+            ],
+            bufferViews=[
+                BufferView(buffer=1, byteOffset=0, byteLength=6),
+                BufferView(buffer=0, byteOffset=0, byteLength=image_bytelen)
+            ],
+            images=[
+                Image(bufferView=1, mimeType='image/png')
+            ])
+        gltf = GLTF(model=model, resources=[glb_resource, file_resource])
+
+        # Act
+        exported_uri = 'http://www.example.com/data.bin'
+        converted_resource = gltf.convert_to_external_resource(glb_resource, exported_uri)
+
+        # Assert
+        # There should be 2 resources, the converted ExternalResource and the original FileResource
+        self.assertEqual(2, len(gltf.resources))
+        self.assertTrue(file_resource in gltf.resources)
+        external_resource = next((r for r in gltf.resources if isinstance(r, ExternalResource)), None)
+        self.assertIsNotNone(external_resource)
+        self.assertIsInstance(external_resource, ExternalResource)
+        self.assertIs(converted_resource, external_resource)
+        # Ensure ExternalResource URI is correct
+        self.assertEqual(exported_uri, external_resource.uri)
+        # There should be two buffers, one that now has an external URI, and another for file resource that wasn't
+        # converted.
+        self.assertEqual(2, len(gltf.model.buffers))
+        self.assertEqual(Buffer(uri=exported_uri, byteLength=image_bytelen), gltf.model.buffers[0])
+        self.assertEqual(Buffer(uri=file_resource_uri, byteLength=binary_data_bytelen), gltf.model.buffers[1])
+        # There should still be 2 buffer views (i.e., the buffer view for the image should NOT be removed in this case
+        # since it is also referenced by an accessor)
+        self.assertEqual([
+            BufferView(buffer=1, byteOffset=0, byteLength=6),
+            BufferView(buffer=0, byteOffset=0, byteLength=image_bytelen)
+        ], gltf.model.bufferViews)
+        # Image should continue to reference the buffer view since it wasn't removed
+        self.assertIsNone(gltf.model.images[0].uri)
+        self.assertEqual(1, gltf.model.images[0].bufferView)
+        # Accessors should be retained (buffer views indices should not be updated since no buffer views were removed)
+        self.assertEqual(1, len(gltf.model.accessors))
+        self.assertEqual(Accessor(bufferView=1, componentType=999, count=1, type='foo'), gltf.model.accessors[0])
+
+    def test_convert_to_external_resource_raises_error_if_resource_is_not_in_model(self):
+        """Ensures GLTF.convert_to_external_resource raises an error if the resource is not part of the model."""
+        # Arrange
+        data = b'sample binary data'
+        bytelen = len(data)
+        resource = FileResource('buffer.bin', data=data)
+        model = GLTFModel(asset=Asset(version='2.0'), buffers=[Buffer(uri='buffer.bin', byteLength=bytelen)])
+        gltf = GLTF(model=model, resources=[])
+
+        # Act/Assert
+        with self.assertRaises(RuntimeError):
+            _ = gltf.convert_to_external_resource(resource, 'buffer.bin')

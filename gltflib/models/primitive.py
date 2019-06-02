@@ -1,18 +1,8 @@
 from dataclasses import dataclass, field
 from dataclasses_json import dataclass_json
-from enum import Enum
 from typing import Optional, List
 from .attributes import Attributes
 from .base_model import BaseModel
-
-
-class PrimitiveMode(Enum):
-    POINTS = 0
-    LINES = 1
-    LINE_LOOP = 2
-    LINE_STRIP = 3
-    TRIANGLES = 4
-    TRIANGLE_STRIP = 5
 
 
 @dataclass

@@ -1,3 +1,4 @@
+from .enums import *
 from .models import *
 from .utils import *
 from .gltf import GLTF

@@ -1,18 +1,11 @@
 from dataclasses import dataclass
 from dataclasses_json import dataclass_json
 from typing import Optional, List
-from enum import Enum
 from .named_base_model import NamedBaseModel
 from .normal_texture_info import NormalTextureInfo
 from .occlusion_texture_info import OcclusionTextureInfo
 from .pbr_metallic_roughness import PBRMetallicRoughness
 from .texture_info import TextureInfo
-
-
-class AlphaMode(Enum):
-    OPAQUE = 'OPAQUE'
-    MASK = 'MASK'
-    BLEND = 'BLEND'
 
 
 @dataclass_json

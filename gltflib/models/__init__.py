@@ -1,14 +1,14 @@
-from .accessor import Accessor, AccessorType, ComponentType
+from .accessor import Accessor
 from .animation import Animation
-from .animation_sampler import AnimationSampler, Interpolation
+from .animation_sampler import AnimationSampler
 from .asset import Asset
 from .attributes import Attributes
 from .buffer import Buffer
-from .buffer_view import BufferView, BufferTarget
-from .camera import Camera, CameraType
+from .buffer_view import BufferView
+from .camera import Camera
 from .channel import Channel
 from .image import Image
-from .material import Material, AlphaMode
+from .material import Material
 from .mesh import Mesh
 from .node import Node
 from .normal_texture_info import NormalTextureInfo
@@ -16,10 +16,13 @@ from .occlusion_texture_info import OcclusionTextureInfo
 from .orthographic_camera_info import OrthographicCameraInfo
 from .perspective_camera_info import PerspectiveCameraInfo
 from .pbr_metallic_roughness import PBRMetallicRoughness
-from .primitive import Primitive, PrimitiveMode
+from .primitive import Primitive
 from .sampler import Sampler
 from .scene import Scene
+from .sparse import Sparse
+from .sparse_indices import SparseIndices
+from .sparse_values import SparseValues
 from .gltf_model import GLTFModel
-from .target import Target, AnimationTargetPath
+from .target import Target
 from .texture import Texture
 from .texture_info import TextureInfo

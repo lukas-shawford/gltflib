@@ -1,15 +1,9 @@
 from dataclasses import dataclass
 from dataclasses_json import dataclass_json
-from enum import Enum
 from typing import Optional
 from .named_base_model import NamedBaseModel
 from .orthographic_camera_info import OrthographicCameraInfo
 from .perspective_camera_info import PerspectiveCameraInfo
-
-
-class CameraType(Enum):
-    PERSPECTIVE = 'perspective'
-    ORTHOGRAPHIC = 'orthographic'
 
 
 @dataclass_json
