@@ -10,6 +10,14 @@ this data into a properly formatted glTF/GLB file. It also helps with converting
 inside a glTF/GLB file between external files or web URLs, data URLs, and embedded GLB
 resources.
 
+## Installation
+
+This library can be installed using pip:
+
+```
+pip install gltflib
+```
+
 ## Usage
 
 The examples below illustrate how to use this library for a couple sample scenarios. The
