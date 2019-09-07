@@ -1,6 +1,6 @@
 import struct
-import magic
 import base64
+import mimetypes
 from os import path
 from abc import ABC, abstractmethod
 from typing import Optional
@@ -72,7 +72,7 @@ class FileResource(GLTFResource):
         filename = path.join(self._basepath, self.filename) if self._basepath is not None else self.filename
         with open(filename, 'rb') as f:
             self._data = f.read()
-            self._mimetype = self._mimetype or magic.from_file(filename, mime=True)
+            self._mimetype = self._mimetype or mimetypes.guess_type(filename)[0]
         self._loaded = True
 
     def export(self, basepath: str = None) -> None:

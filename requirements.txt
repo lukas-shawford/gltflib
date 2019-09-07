@@ -8,7 +8,6 @@ idna==2.8
 marshmallow==3.0.0rc5
 pkginfo==1.5.0.1
 Pygments==2.3.1
-python-magic==0.4.15
 readme-renderer==24.0
 requests==2.21.0
 requests-toolbelt==0.9.1

@@ -20,8 +20,7 @@ REQUIRES_PYTHON = '>=3.6.0'
 # Required packages
 REQUIRED = [
     'dataclasses>=0.6',
-    'dataclasses-json>=0.2.2',
-    'python-magic>=0.4.15'
+    'dataclasses-json>=0.2.2'
 ]
 
 # Optional packages
