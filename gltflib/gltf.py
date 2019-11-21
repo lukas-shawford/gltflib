@@ -406,8 +406,6 @@ class GLTF:
         self.model = GLTFModel.from_json(model_json)
 
     def _load_glb_binary_chunk_body(self, f: BinaryIO, chunk_type: int, bytelen: int) -> None:
-        if bytelen == 0:
-            raise RuntimeError('Binary chunk body may not be empty')
         b = f.read(bytelen)
         if len(b) != bytelen:
             raise RuntimeError(f'Unexpected EOF when parsing binary chunk body. The GLB file may be corrupt.')

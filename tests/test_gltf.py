@@ -2159,3 +2159,14 @@ class TestGLTF(TestCase):
         # Act/Assert
         with self.assertRaises(RuntimeError):
             _ = gltf.convert_to_external_resource(resource, 'buffer.bin')
+
+    def test_import_empty_binary_chunk(self):
+        """Ensures a GLB file with a binary chunk having zero byte length can be loaded"""
+        # Act
+        glb = GLTF.load(sample('EmptyChunk/EmptyBinaryChunk.glb'))
+
+        # Assert
+        self.assertEqual(1, len(glb.resources))
+        resource = glb.resources[0]
+        self.assertIsInstance(resource, GLBResource)
+        self.assertEqual(b'', resource.data)
