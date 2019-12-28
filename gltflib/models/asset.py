@@ -4,8 +4,8 @@ from typing import Optional
 from .base_model import BaseModel
 
 
-@dataclass
 @dataclass_json
+@dataclass
 class Asset(BaseModel):
     """
     Metadata about the glTF asset.

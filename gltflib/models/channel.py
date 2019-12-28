@@ -4,8 +4,8 @@ from .base_model import BaseModel
 from .target import Target
 
 
-@dataclass
 @dataclass_json
+@dataclass
 class Channel(BaseModel):
     """
     Targets an animation's sampler at a node's property.

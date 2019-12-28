@@ -4,8 +4,8 @@ from typing import Optional
 from .base_model import BaseModel
 
 
-@dataclass
 @dataclass_json
+@dataclass
 class Target(BaseModel):
     """
     The index of the node and TRS property that an animation channel targets.

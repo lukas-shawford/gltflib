@@ -5,8 +5,8 @@ from .base_model import BaseModel
 from .texture_info import TextureInfo
 
 
-@dataclass
 @dataclass_json
+@dataclass
 class PBRMetallicRoughness(BaseModel):
     """
     A set of parameter values that are used to define the metallic-roughness material model from Physically-Based

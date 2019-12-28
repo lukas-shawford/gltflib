@@ -4,8 +4,8 @@ from typing import Optional
 from .texture_info import TextureInfo
 
 
-@dataclass
 @dataclass_json
+@dataclass
 class OcclusionTextureInfo(TextureInfo):
     """
     Material Occlusion Texture Info

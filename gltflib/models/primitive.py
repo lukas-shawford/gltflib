@@ -5,8 +5,8 @@ from .attributes import Attributes
 from .base_model import BaseModel
 
 
-@dataclass
 @dataclass_json
+@dataclass
 class Primitive(BaseModel):
     """
     Geometry to be rendered with the given material.
