@@ -1,4 +1,5 @@
 import json
+import warnings
 from unittest import TestCase
 from gltflib import GLTFModel, Asset, Buffer
 
@@ -14,12 +15,6 @@ class TestGLTFModel(TestCase):
 
         # Assert
         self.assertIsInstance(model, GLTFModel)
-
-    def test_init_missing_property(self):
-        """Ensures model initialization results in error if a required property is missing"""
-        # Act/Assert
-        with self.assertRaisesRegex(TypeError, 'asset'):
-            _ = GLTFModel()
 
     def test_asset_version_default(self):
         """Ensures asset version is initialized as 2.0 if not passed in"""
@@ -65,12 +60,15 @@ class TestGLTFModel(TestCase):
 
     def test_decode_missing_required_property(self):
         """
-        Ensures that an error is raised when decoding a model from JSON if any required properties are missing.
-        In this case, the version property on the asset is missing.
+        Ensures that a warning is emitted when decoding a model from JSON if any required properties are missing.
+        In this case, the "asset" property on the model is missing.
         """
         # Arrange
         v = '{}'
 
         # Act/Assert
-        with self.assertRaisesRegex(TypeError, 'version.*Asset'):
+        with warnings.catch_warnings(record=True) as ws:
             _ = GLTFModel.from_json(v)
+            self.assertEqual(1, len(ws))
+            warning = ws[0]
+            self.assertRegex(str(warning.message), "non-optional type asset")
