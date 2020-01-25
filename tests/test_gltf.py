@@ -4,21 +4,10 @@ import json
 import base64
 from os import path
 from unittest import TestCase
+from .util import sample, TEMP_DIR
 from gltflib import (
     GLTF, GLTFModel, Accessor, Asset, FileResource, ExternalResource, Buffer, BufferView, Image, GLBResource,
     Base64Resource, GLB_BINARY_CHUNK_TYPE, Sparse, SparseIndices, SparseValues)
-
-
-# Temporary directory used for tests
-TEMP_DIR = 'tests/temp'
-
-# Directory containing sample files used for tests
-SAMPLES_DIR = 'tests/samples'
-
-
-# Helper function for returning path to a sample file
-def sample(filename):
-    return path.join(SAMPLES_DIR, filename)
 
 
 class TestGLTF(TestCase):

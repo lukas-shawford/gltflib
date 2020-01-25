@@ -19,6 +19,7 @@ from .pbr_metallic_roughness import PBRMetallicRoughness
 from .primitive import Primitive
 from .sampler import Sampler
 from .scene import Scene
+from .skin import Skin
 from .sparse import Sparse
 from .sparse_indices import SparseIndices
 from .sparse_values import SparseValues

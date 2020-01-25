@@ -16,6 +16,7 @@ from .mesh import Mesh
 from .node import Node
 from .sampler import Sampler
 from .scene import Scene
+from .skin import Skin
 from .texture import Texture
 
 
@@ -37,6 +38,7 @@ class GLTFModel(DataClassJsonMixin, BaseModel):
     samplers: Optional[List[Sampler]] = None
     scene: Optional[int] = None
     scenes: Optional[List[Scene]] = None
+    skins: Optional[List[Skin]] = None
     textures: Optional[List[Texture]] = None
 
     def to_json(self, **kwargs):

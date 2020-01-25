@@ -1,7 +1,8 @@
 import json
 import warnings
 from unittest import TestCase
-from gltflib import GLTFModel, Asset, Buffer
+from .util import sample, TEMP_DIR
+from gltflib import GLTF, GLTFModel, Asset, Buffer
 
 
 class TestGLTFModel(TestCase):
@@ -72,3 +73,15 @@ class TestGLTFModel(TestCase):
             self.assertEqual(1, len(ws))
             warning = ws[0]
             self.assertRegex(str(warning.message), "non-optional type asset")
+
+    def test_load_skins(self):
+        """Ensures skin data is loaded"""
+        # Act
+        gltf = GLTF.load(sample('RiggedSimple/glTF/RiggedSimple.gltf'))
+
+        # Assert
+        self.assertEqual(1, len(gltf.model.skins))
+        skin = gltf.model.skins[0]
+        self.assertEqual(13, skin.inverseBindMatrices)
+        self.assertEqual(2, skin.skeleton)
+        self.assertCountEqual([2, 3], skin.joints)
