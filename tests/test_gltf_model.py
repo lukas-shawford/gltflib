@@ -1,7 +1,6 @@
 import json
-import warnings
 from unittest import TestCase
-from .util import sample, TEMP_DIR
+from .util import sample
 from gltflib import GLTF, GLTFModel, Asset, Buffer
 
 
@@ -68,11 +67,8 @@ class TestGLTFModel(TestCase):
         v = '{}'
 
         # Act/Assert
-        with warnings.catch_warnings(record=True) as ws:
+        with self.assertWarnsRegex(RuntimeWarning, "non-optional type asset"):
             _ = GLTFModel.from_json(v)
-            self.assertEqual(1, len(ws))
-            warning = ws[0]
-            self.assertRegex(str(warning.message), "non-optional type asset")
 
     def test_load_skins(self):
         """Ensures skin data is loaded"""
