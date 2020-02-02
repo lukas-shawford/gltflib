@@ -3,7 +3,7 @@ from dataclasses_json import dataclass_json
 from typing import List
 from .named_base_model import NamedBaseModel
 from .channel import Channel
-from .sampler import Sampler
+from .animation_sampler import AnimationSampler
 
 
 @dataclass_json
@@ -22,4 +22,4 @@ class Animation(NamedBaseModel):
     extras (any): Application-specific data. (Optional)
     """
     channels: List[Channel] = None
-    samplers: List[Sampler] = None
+    samplers: List[AnimationSampler] = None

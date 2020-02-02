@@ -1,10 +1,13 @@
 import json
 from unittest import TestCase
 from .util import sample
-from gltflib import GLTF, GLTFModel, Asset, Buffer
+from gltflib import GLTF, GLTFModel, Asset, Buffer, Animation, AnimationSampler, Channel, Target
 
 
 class TestGLTFModel(TestCase):
+    def setUp(self):
+        self.maxDiff = None
+
     def test_init(self):
         """
         Basic test ensuring the successful initialization of a GLTF2 model when all required properties are passed
@@ -81,3 +84,15 @@ class TestGLTFModel(TestCase):
         self.assertEqual(9, skin.inverseBindMatrices)
         self.assertEqual(3, skin.skeleton)
         self.assertCountEqual([3, 4], skin.joints)
+
+    def test_load_animations(self):
+        """Ensures animation data is loaded correctly"""
+        # Act
+        gltf = GLTF.load(sample('AnimatedCube'))
+
+        # Assert
+        self.assertCountEqual([Animation(
+            name="animation_AnimatedCube",
+            channels=[Channel(sampler=0, target=Target(node=0, path="rotation"))],
+            samplers=[AnimationSampler(input=0, interpolation="LINEAR", output=1)]
+        )], gltf.model.animations)
