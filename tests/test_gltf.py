@@ -1,10 +1,9 @@
 import os
-import shutil
 import json
 import base64
 from os import path
 from unittest import TestCase
-from .util import sample, TEMP_DIR
+from .util import sample, custom_sample, setup_temp_dir, SAMPLES_DIR, TEMP_DIR
 from gltflib import (
     GLTF, GLTFModel, Accessor, Asset, FileResource, ExternalResource, Buffer, BufferView, Image, GLBResource,
     Base64Resource, GLB_BINARY_CHUNK_TYPE, Sparse, SparseIndices, SparseValues)
@@ -13,9 +12,7 @@ from gltflib import (
 class TestGLTF(TestCase):
     @classmethod
     def setUpClass(cls):
-        if path.exists(TEMP_DIR):
-            shutil.rmtree(TEMP_DIR)
-        os.makedirs(TEMP_DIR)
+        setup_temp_dir()
 
     def assert_gltf_files_equal(self, filename1, filename2):
         """Helper method for asserting two GLTF files contain equivalent JSON"""
@@ -28,7 +25,7 @@ class TestGLTF(TestCase):
     def test_load(self):
         """Basic test ensuring the class can successfully load a minimal GLTF 2.0 file."""
         # Act
-        gltf = GLTF.load(sample('Minimal/minimal.gltf'))
+        gltf = GLTF.load(custom_sample('Minimal/minimal.gltf'))
 
         # Assert
         self.assertIsInstance(gltf, GLTF)
@@ -44,12 +41,12 @@ class TestGLTF(TestCase):
         gltf.export(filename)
 
         # Assert
-        self.assert_gltf_files_equal(sample('Minimal/minimal.gltf'), filename)
+        self.assert_gltf_files_equal(custom_sample('Minimal/minimal.gltf'), filename)
 
     def test_load_file_resource(self):
         """External files referenced in a glTF model should be loaded as FileResource"""
         # Act
-        gltf = GLTF.load(sample('TriangleWithoutIndices/TriangleWithoutIndices.gltf'))
+        gltf = GLTF.load(sample('TriangleWithoutIndices'))
 
         # Assert
         self.assertIsInstance(gltf.resources, list)
@@ -60,7 +57,7 @@ class TestGLTF(TestCase):
     def test_load_file_resource_no_autoload(self):
         """File resource contents should not be autoloaded by default"""
         # Act
-        gltf = GLTF.load(sample('TriangleWithoutIndices/TriangleWithoutIndices.gltf'))
+        gltf = GLTF.load(sample('TriangleWithoutIndices'))
         resource = gltf.get_resource('triangleWithoutIndices.bin')
 
         # Assert
@@ -71,33 +68,33 @@ class TestGLTF(TestCase):
     def test_load_file_resource_with_autoload(self):
         """When load_file_resources is true, file resource contents should be autoloaded"""
         # Act
-        gltf = GLTF.load(sample('TriangleWithoutIndices/TriangleWithoutIndices.gltf'), load_file_resources=True)
+        gltf = GLTF.load(sample('TriangleWithoutIndices'), load_file_resources=True)
         resource = gltf.get_resource('triangleWithoutIndices.bin')
 
         # Assert
         self.assertIsInstance(resource, FileResource)
         self.assertTrue(resource.loaded)
-        with open(sample('TriangleWithoutIndices/triangleWithoutIndices.bin'), 'rb') as f:
+        with open(path.join(SAMPLES_DIR, 'TriangleWithoutIndices/glTF/triangleWithoutIndices.bin'), 'rb') as f:
             data = f.read()
         self.assertEqual(data, resource.data)
 
     def test_load_image_resources(self):
         """Ensure image resources are loaded"""
         # Act
-        gltf = GLTF.load(sample('BoxTextured/gltf/BoxTextured.gltf'), load_file_resources=True)
+        gltf = GLTF.load(sample('BoxTextured'), load_file_resources=True)
         texture = gltf.get_resource('CesiumLogoFlat.png')
 
         # Assert
         self.assertIsInstance(texture, FileResource)
-        with open(sample('BoxTextured/gltf/CesiumLogoFlat.png'), 'rb') as f:
+        with open(path.join(SAMPLES_DIR, 'BoxTextured/glTF/CesiumLogoFlat.png'), 'rb') as f:
             texture_data = f.read()
         self.assertEqual(texture_data, texture.data)
 
     def test_load_external_resources(self):
         """External resources should be parsed as ExternalResource instances, but otherwise ignored (for now)"""
         # Act
-        gltf = GLTF.load(sample('BoxTextured/external/BoxTextured.gltf'))
-        uri = 'https://www.example.com'
+        gltf = GLTF.load(custom_sample('External/external.gltf'))
+        uri = 'http://www.example.com/image.jpg'
         resource = gltf.get_resource(uri)
 
         # Assert
@@ -117,7 +114,7 @@ class TestGLTF(TestCase):
         resource = FileResource('triangleWithoutIndices.bin', data=data)
 
         # Act
-        gltf = GLTF.load(sample('TriangleWithoutIndices/TriangleWithoutIndices.gltf'), resources=[resource])
+        gltf = GLTF.load(sample('TriangleWithoutIndices'), resources=[resource])
         loaded_resource = gltf.get_resource('triangleWithoutIndices.bin')
 
         # Assert
@@ -197,7 +194,7 @@ class TestGLTF(TestCase):
     def test_load_glb(self):
         """Ensure a model can be loaded from a binary glTF (GLB) file"""
         # Act
-        gltf = GLTF.load(sample('Box/glb/Box.glb'))
+        gltf = GLTF.load(sample('Box', 'glTF-Binary'))
 
         # Assert
         self.assertEqual('2.0', gltf.model.asset.version)
@@ -261,7 +258,7 @@ class TestGLTF(TestCase):
         """
         # Arrange
         # Load a glTF model with load_file_resources set to False
-        gltf = GLTF.load(sample('BoxTextured/gltf/BoxTextured.gltf'), load_file_resources=False)
+        gltf = GLTF.load(sample('BoxTextured'), load_file_resources=False)
         # Resource should initially not be loaded
         resource = gltf.get_resource('CesiumLogoFlat.png')
         self.assertIsInstance(resource, FileResource)
@@ -1057,7 +1054,7 @@ class TestGLTF(TestCase):
         """
         # Arrange
         # Load a glTF model with load_file_resources set to False
-        gltf = GLTF.load(sample('BoxTextured/gltf/BoxTextured.gltf'), load_file_resources=False)
+        gltf = GLTF.load(sample('BoxTextured'), load_file_resources=False)
         # Ensure resource is initially not loaded
         resource = gltf.get_resource('CesiumLogoFlat.png')
         self.assertIsInstance(resource, FileResource)
@@ -1090,7 +1087,7 @@ class TestGLTF(TestCase):
         """
         # Arrange
         # Load a glTF model with load_file_resources set to False
-        gltf = GLTF.load(sample('BoxTextured/gltf/BoxTextured.gltf'), load_file_resources=False)
+        gltf = GLTF.load(sample('BoxTextured'), load_file_resources=False)
         # Resource should initially not be loaded
         resource = gltf.get_resource('CesiumLogoFlat.png')
         self.assertIsInstance(resource, FileResource)
@@ -1112,7 +1109,7 @@ class TestGLTF(TestCase):
         # Ensure image got saved
         image_filename = path.join(TEMP_DIR, 'CesiumLogoFlat.png')
         self.assertTrue(path.exists(image_filename))
-        with open(sample('BoxTextured/gltf/CesiumLogoFlat.png'), 'rb') as f:
+        with open(path.join(SAMPLES_DIR, 'BoxTextured/glTF/CesiumLogoFlat.png'), 'rb') as f:
             original_texture_data = f.read()
         with open(image_filename, 'rb') as f:
             texture_data = f.read()
@@ -1125,7 +1122,7 @@ class TestGLTF(TestCase):
         """
         # Arrange
         # Load a glTF model with load_file_resources set to False
-        gltf = GLTF.load(sample('BoxTextured/gltf/BoxTextured.gltf'), load_file_resources=False)
+        gltf = GLTF.load(sample('BoxTextured'), load_file_resources=False)
         # Resource should initially not be loaded
         resource = gltf.get_resource('CesiumLogoFlat.png')
         self.assertIsInstance(resource, FileResource)
@@ -1182,7 +1179,7 @@ class TestGLTF(TestCase):
     def test_load_glb_with_multiple_glb_resources(self):
         """Test loading a GLB with multiple GLB resources with different types."""
         # Act
-        gltf = GLTF.load(sample('MultipleChunks/MultipleChunks.glb'))
+        gltf = GLTF.load(custom_sample('MultipleChunks/MultipleChunks.glb'))
 
         # Assert
         # Model should have two GLB resources
@@ -1216,7 +1213,7 @@ class TestGLTF(TestCase):
     def test_load_gltf_with_base64_resource(self):
         """Basic test to ensure a model with an embedded base64-encoded resource is parsed correctly."""
         # Act
-        gltf = GLTF.load(sample('Box/base64/Box.gltf'))
+        gltf = GLTF.load(sample('Box', 'glTF-Embedded'))
 
         # Assert
         # Ensure the resource got parsed correctly as a Base64Resource
@@ -1226,7 +1223,7 @@ class TestGLTF(TestCase):
         # Ensure byte length is correct
         self.assertEqual(648, len(resource.data))
         # Ensure binary data matches
-        with open(sample('Box/gltf/Box0.bin'), 'rb') as f:
+        with open(path.join(SAMPLES_DIR, 'Box/glTF/Box0.bin'), 'rb') as f:
             data = f.read()
         self.assertEqual(data, resource.data)
         # Ensure buffer URI is preserved as base64
@@ -1238,7 +1235,7 @@ class TestGLTF(TestCase):
     def test_load_gltf_with_base64_image_resource(self):
         """Ensure a base64-encoded image resource is parsed correctly."""
         # Act
-        gltf = GLTF.load(sample('BoxTextured/base64/BoxTextured.gltf'))
+        gltf = GLTF.load(sample('BoxTextured', 'glTF-Embedded'))
 
         # Assert
         # There should be two resources (one for the image and another for the buffer data)
@@ -1250,9 +1247,9 @@ class TestGLTF(TestCase):
         self.assertEqual(23516, len(image_resource.data))
         self.assertEqual(840, len(buffer_resource.data))
         # Ensure binary data matches on both resources
-        with open(sample('BoxTextured/gltf/CesiumLogoFlat.png'), 'rb') as f1:
+        with open(path.join(SAMPLES_DIR, 'BoxTextured/glTF/CesiumLogoFlat.png'), 'rb') as f1:
             image_data = f1.read()
-        with open(sample('BoxTextured/gltf/BoxTextured0.bin'), 'rb') as f2:
+        with open(path.join(SAMPLES_DIR, 'BoxTextured/glTF/BoxTextured0.bin'), 'rb') as f2:
             buffer_data = f2.read()
         self.assertEqual(image_data, image_resource.data)
         self.assertEqual(buffer_data, buffer_resource.data)
@@ -1347,7 +1344,7 @@ class TestGLTF(TestCase):
     def test_embed_base64_resource_to_glb(self):
         """Ensure base64-encoded resources can be embedded as GLB using embed_resource."""
         # Arrage
-        gltf = GLTF.load(sample('BoxTextured/base64/BoxTextured.gltf'))
+        gltf = GLTF.load(sample('BoxTextured', 'glTF-Embedded'))
         image_resource = gltf.resources[0]
         buffer_resource = gltf.resources[1]
 
@@ -1371,7 +1368,7 @@ class TestGLTF(TestCase):
     def test_export_base64_resource_to_glb(self):
         """Ensure exporting a model containing base64-encoded resources to GLB."""
         # Arrage
-        gltf = GLTF.load(sample('BoxTextured/base64/BoxTextured.gltf'))
+        gltf = GLTF.load(sample('BoxTextured', 'glTF-Embedded'))
 
         # Act
         filename = path.join(TEMP_DIR, 'test_export_base64_resource_to_glb.glb')
@@ -1412,7 +1409,7 @@ class TestGLTF(TestCase):
         data_uri = 'http://www.example.com/data.bin'
 
         # Act
-        gltf = GLTF.load(sample('External/external.gltf'))
+        gltf = GLTF.load(custom_sample('External/external.gltf'))
 
         # Assert
         self.assertEqual(2, len(gltf.resources))
@@ -1429,7 +1426,7 @@ class TestGLTF(TestCase):
         external_uri = 'http://www.example.com/data.bin'
 
         # Act
-        gltf = GLTF.load(sample('External/external.glb'))
+        gltf = GLTF.load(custom_sample('External/external.glb'))
 
         # Assert
         self.assertEqual(1, len(gltf.resources))
@@ -1527,7 +1524,7 @@ class TestGLTF(TestCase):
     def test_convert_glb_resource_to_file_resource(self):
         """Ensures GLTF.convert_to_file_resource can convert a GLBResource to a FileResource"""
         # Arrange
-        gltf = GLTF.load(sample('BoxTextured/glb/BoxTextured.glb'))
+        gltf = GLTF.load(sample('BoxTextured', 'glTF-Binary'))
         # Ensure there is 1 resource to begin with
         self.assertEqual(1, len(gltf.resources))
         glb_resource = gltf.get_glb_resource()
@@ -1560,7 +1557,7 @@ class TestGLTF(TestCase):
         # Arrange
         image_uri = 'http://www.example.com/image.jpg'
         data_uri = 'http://www.example.com/data.bin'
-        gltf = GLTF.load(sample('External/external.gltf'))
+        gltf = GLTF.load(custom_sample('External/external.gltf'))
         image_resource = next(r for r in gltf.resources if r.uri == image_uri)
         data_resource = next(r for r in gltf.resources if r.uri == data_uri)
 
@@ -1626,7 +1623,7 @@ class TestGLTF(TestCase):
         FileResource was not initially loaded.
         """
         # Arrange
-        gltf = GLTF.load(sample('TriangleWithoutIndices/TriangleWithoutIndices.gltf'), load_file_resources=False)
+        gltf = GLTF.load(sample('TriangleWithoutIndices'), load_file_resources=False)
         file_resource = gltf.get_resource('triangleWithoutIndices.bin')
         self.assertIsInstance(file_resource, FileResource)
         self.assertFalse(file_resource.loaded)
@@ -1840,7 +1837,7 @@ class TestGLTF(TestCase):
         # Arrange
         image_uri = 'http://www.example.com/image.jpg'
         data_uri = 'http://www.example.com/data.bin'
-        gltf = GLTF.load(sample('External/external.gltf'))
+        gltf = GLTF.load(custom_sample('External/external.gltf'))
         image_resource = next(r for r in gltf.resources if r.uri == image_uri)
         data_resource = next(r for r in gltf.resources if r.uri == data_uri)
 
@@ -2152,7 +2149,7 @@ class TestGLTF(TestCase):
     def test_import_empty_binary_chunk(self):
         """Ensures a GLB file with a binary chunk having zero byte length can be loaded"""
         # Act
-        glb = GLTF.load(sample('EmptyChunk/EmptyBinaryChunk.glb'))
+        glb = GLTF.load(custom_sample('EmptyChunk/EmptyBinaryChunk.glb'))
 
         # Assert
         self.assertEqual(1, len(glb.resources))

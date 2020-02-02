@@ -73,11 +73,11 @@ class TestGLTFModel(TestCase):
     def test_load_skins(self):
         """Ensures skin data is loaded"""
         # Act
-        gltf = GLTF.load(sample('RiggedSimple/glTF/RiggedSimple.gltf'))
+        gltf = GLTF.load(sample('RiggedSimple'))
 
         # Assert
         self.assertEqual(1, len(gltf.model.skins))
         skin = gltf.model.skins[0]
-        self.assertEqual(13, skin.inverseBindMatrices)
-        self.assertEqual(2, skin.skeleton)
-        self.assertCountEqual([2, 3], skin.joints)
+        self.assertEqual(9, skin.inverseBindMatrices)
+        self.assertEqual(3, skin.skeleton)
+        self.assertCountEqual([3, 4], skin.joints)
