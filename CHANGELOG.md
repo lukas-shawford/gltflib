@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.0.4] - 2020-02-16
+
+### Added
+- Added roundtrip tests for all models in the
+[glTF-Sample-Models](https://github.com/KhronosGroup/glTF-Sample-Models) repository
+- Added "extensionsUsed" and "extensionsRequired" properties to model
+
+### Changed
+- Create missing parent directories automatically when exporting the model (and its resources)
+- Retain empty strings, lists, and dictionaries in the model when exporting (only remove properties set to None, leave
+everything else the same)
+
+### Fixed
+- Loosened type restrictions on "extensions" property to avoid error during load when the property is set
+
 ## [1.0.3] - 2020-02-02
 
 ### Changed
