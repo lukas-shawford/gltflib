@@ -1,6 +1,6 @@
 import json
 from unittest import TestCase
-from .util import sample
+from ..util import sample
 from gltflib import GLTF, GLTFModel, Asset, Buffer, Animation, AnimationSampler, Channel, Target
 
 
@@ -35,13 +35,12 @@ class TestGLTFModel(TestCase):
         # Assert
         self.assertEqual(model.asset.version, '2.1')
 
-    def test_to_json_removes_empty_properties(self):
+    def test_to_json_removes_properties_set_to_None(self):
         """
-        Ensures that any properties in the model that are "empty" (empty strings, lists, etc.) are deleted when
-        encoding the model to JSON.
+        Ensures that any properties in the model that are set to None are deleted when encoding the model to JSON.
         """
         # Arrange
-        model = GLTFModel(asset=Asset(generator='', minVersion=None), buffers=[])
+        model = GLTFModel(asset=Asset(generator=None, minVersion=None), buffers=None)
 
         # Act
         v = model.to_json()
@@ -49,6 +48,21 @@ class TestGLTFModel(TestCase):
         # Assert
         data = json.loads(v)
         self.assertDictEqual(data, {'asset': {'version': '2.0'}})
+
+    def test_to_json_retains_empty_strings_lists_and_dicts(self):
+        """
+        Ensures that any properties in the model that are set to an empty string, list, or dictionary are retained when
+        encoding the model to JSON.
+        """
+        # Arrange
+        model = GLTFModel(asset=Asset(generator="", minVersion=None), buffers=[], extensions={})
+
+        # Act
+        v = model.to_json()
+
+        # Assert
+        data = json.loads(v)
+        self.assertDictEqual(data, {'asset': {'version': '2.0', 'generator': ''}, 'buffers': [], 'extensions': {}})
 
     def test_decode(self):
         """Ensures that a simple model can be decoded successfully from JSON."""

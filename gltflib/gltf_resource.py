@@ -4,6 +4,7 @@ import mimetypes
 from os import path
 from abc import ABC, abstractmethod
 from typing import Optional
+from .utils import create_parent_dirs
 
 
 GLB_JSON_CHUNK_TYPE, = struct.unpack('<I', b'JSON')
@@ -83,6 +84,7 @@ class FileResource(GLTFResource):
             raise ValueError("Attempted to export FileResource without data")
         basepath = basepath if basepath is not None else self._basepath
         filename = path.join(basepath, self.filename) if basepath is not None else self.filename
+        create_parent_dirs(filename)
         with open(filename, 'wb') as f:
             f.write(self._data)
 

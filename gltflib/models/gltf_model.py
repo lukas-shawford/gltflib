@@ -1,7 +1,7 @@
 import json
 from dataclasses import dataclass, asdict
 from dataclasses_json import DataClassJsonMixin
-from typing import List, Optional, TypeVar
+from typing import List, Optional
 from ..utils import del_none
 from .accessor import Accessor
 from .animation import Animation
@@ -18,9 +18,6 @@ from .sampler import Sampler
 from .scene import Scene
 from .skin import Skin
 from .texture import Texture
-
-
-T = TypeVar('T', bound='GLTFModel')
 
 
 @dataclass
@@ -40,6 +37,8 @@ class GLTFModel(DataClassJsonMixin, BaseModel):
     scenes: Optional[List[Scene]] = None
     skins: Optional[List[Skin]] = None
     textures: Optional[List[Texture]] = None
+    extensionsRequired: Optional[List[str]] = None
+    extensionsUsed: Optional[List[str]] = None
 
     def to_json(self, **kwargs):
         data = del_none(asdict(self))

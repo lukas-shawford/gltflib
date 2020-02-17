@@ -3,7 +3,7 @@ import json
 import base64
 from os import path
 from unittest import TestCase
-from .util import sample, custom_sample, setup_temp_dir, SAMPLES_DIR, TEMP_DIR
+from ..util import sample, custom_sample, setup_temp_dir, SAMPLES_DIR, TEMP_DIR
 from gltflib import (
     GLTF, GLTFModel, Accessor, Asset, FileResource, ExternalResource, Buffer, BufferView, Image, GLBResource,
     Base64Resource, GLB_BINARY_CHUNK_TYPE, Sparse, SparseIndices, SparseValues)
@@ -36,6 +36,18 @@ class TestGLTF(TestCase):
         # Arrange
         gltf = GLTF(model=GLTFModel(asset=Asset(version="2.0")))
         filename = path.join(TEMP_DIR, 'minimal.gltf')
+
+        # Act
+        gltf.export(filename)
+
+        # Assert
+        self.assert_gltf_files_equal(custom_sample('Minimal/minimal.gltf'), filename)
+
+    def test_export_creates_directories(self):
+        """Create directories if necessary when exporting a model to a directory that does not exist"""
+        # Arrange
+        gltf = GLTF(model=GLTFModel(asset=Asset(version="2.0")))
+        filename = path.join(TEMP_DIR, 'nested', 'directory', 'minimal.gltf')
 
         # Act
         gltf.export(filename)
@@ -138,6 +150,27 @@ class TestGLTF(TestCase):
 
         # Assert
         resource_filename = path.join(TEMP_DIR, 'buffer.bin')
+        self.assertTrue(path.exists(resource_filename))
+        with open(resource_filename, 'rb') as f:
+            self.assertEqual(data, f.read())
+
+    def test_export_file_resources_creates_missing_parent_dirs(self):
+        """
+        When exporting a GLTF model with external file resources, missing directories should be created automatically.
+        """
+        # Arrange
+        data = b'sample binary data'
+        bytelen = len(data)
+        resource = FileResource('subdir/buffer.bin', data=data)
+        model = GLTFModel(asset=Asset(version='2.0'), buffers=[Buffer(uri='subdir/buffer.bin', byteLength=bytelen)])
+        gltf = GLTF(model=model, resources=[resource])
+        filename = path.join(TEMP_DIR, 'sample.gltf')
+
+        # Act
+        gltf.export(filename, save_file_resources=True)
+
+        # Assert
+        resource_filename = path.join(TEMP_DIR, 'subdir', 'buffer.bin')
         self.assertTrue(path.exists(resource_filename))
         with open(resource_filename, 'rb') as f:
             self.assertEqual(data, f.read())

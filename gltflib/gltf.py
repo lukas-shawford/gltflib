@@ -3,15 +3,12 @@ import copy
 import warnings
 from os import path
 from urllib.parse import urlparse
-from typing import Type, TypeVar, Tuple, List, Iterator, Iterable, Optional, Set, BinaryIO
+from typing import Tuple, List, Iterator, Iterable, Optional, Set, BinaryIO
 from .gltf_resource import (
     GLTFResource, FileResource, ExternalResource, GLBResource, Base64Resource, GLB_JSON_CHUNK_TYPE,
     GLB_BINARY_CHUNK_TYPE)
 from .models import GLTFModel, Buffer, BufferView, Image
-from .utils import padbytes
-
-
-T = TypeVar('T', bound='GLTF')
+from .utils import padbytes, create_parent_dirs
 
 
 class GLTF:
@@ -22,7 +19,7 @@ class GLTF:
         self.resources = resources
 
     @classmethod
-    def load(cls: Type[T], filename: str, load_file_resources=False, resources: List[GLTFResource] = None) -> 'GLTF':
+    def load(cls: 'GLTF', filename: str, load_file_resources=False, resources: List[GLTFResource] = None) -> 'GLTF':
         """
         Loads a GLTF or GLB model from a filename. The model format will be inferred from the filename extension.
         :param filename: Path to the GLTF or GLB file
@@ -43,7 +40,7 @@ class GLTF:
                            f'the filename does not follow the convention but the format is known.')
 
     @classmethod
-    def load_gltf(cls: Type[T], filename: str, load_file_resources=False, resources: List[GLTFResource] = None)\
+    def load_gltf(cls: 'GLTF', filename: str, load_file_resources=False, resources: List[GLTFResource] = None)\
             -> 'GLTF':
         """
         Loads a model in GLTF format from a filename
@@ -64,7 +61,7 @@ class GLTF:
         return gltf
 
     @classmethod
-    def load_glb(cls: Type[T], filename: str, load_file_resources=False, resources: List[GLTFResource] = None) -> T:
+    def load_glb(cls: 'GLTF', filename: str, load_file_resources=False, resources: List[GLTFResource] = None) -> 'GLTF':
         """
         Loads a model in GLB format from a filename
         :param filename: Path to the GLB file
@@ -419,6 +416,7 @@ class GLTF:
                             "provided helper methods in this class (GLTF.convert_to_file_resource,"
                             "GLTF.convert_to_base64_resource, or GLTF.convert_to_external_resource) prior to "
                             "exporting to GLTF, or export to GLB instead.")
+        create_parent_dirs(filename)
         data = self.model.to_json()
         with open(filename, 'w') as f:
             f.write(data)
@@ -433,6 +431,7 @@ class GLTF:
             self._embed_buffer_resources()
         if embed_image_resources:
             self._embed_image_resources()
+        create_parent_dirs(filename)
         with open(filename, 'wb') as f:
             self._write_glb(f)
         if save_file_resources:

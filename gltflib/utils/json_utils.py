@@ -10,7 +10,7 @@ def del_none(d):
     # For Python 3, write `list(d.items())`; `d.items()` won’t work
     # For Python 2, write `d.items()`; `d.iteritems()` won’t work
     for key, value in list(d.items()):
-        if value is None or (hasattr(value, '__iter__') and len(value) == 0):
+        if value is None:
             del d[key]
         elif isinstance(value, dict):
             del_none(value)

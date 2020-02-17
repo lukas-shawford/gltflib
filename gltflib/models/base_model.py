@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from dataclasses_json import dataclass_json
-from typing import Optional, Dict, Any
+from typing import Optional, Any
 
 
 @dataclass_json
@@ -13,5 +13,5 @@ class BaseModel:
     extensions (object): Dictionary object with extension-specific objects. (Optional)
     extras (any) Application-specific data. (Optional)
     """
-    extensions: Optional[Dict] = None
+    extensions: Optional[Any] = None
     extras: Optional[Any] = None

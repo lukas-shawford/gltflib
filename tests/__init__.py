@@ -1,2 +1,2 @@
-from .test_gltf import TestGLTF
-from .test_gltf_model import TestGLTFModel
+from .unit import *
+from .e2e import *
