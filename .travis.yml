@@ -1,9 +1,23 @@
 language: python
-python:
-  - "3.6"
-  - "3.7"
-  - "3.8"
 script: scripts/run_tests.sh
 branches:
   only:
     - master
+    - travis-test
+python:
+  - "3.6"
+  - "3.7"
+  - "3.8"
+env:
+  # Perform a test run on earliest supported versions of dataclasses and dataclasses-json (as specified in setup.py).
+  # If tests fail, and it's non-trivial to fix, then we will need to manually determine the new minimum required
+  # version of each library. Once these are determined, bump the versions here and in setup.py.
+  - DATACLASSES_VERSION=0.6 DATACLASSES_JSON_VERSION=0.2.2
+  # Perform another test run on latest available versions of those same libraries. This will need to be updated manually
+  # as new versions become available.
+  - DATACLASSES_VERSION=0.7 DATACLASSES_JSON_VERSION=0.3.8
+install:
+  # Install original requirements (as specified in requirements.txt)
+  - pip install -q -r requirements.txt
+  # Override versions of dataclasses and dataclasses-json libraries with the versions specified in the current test run
+  - pip install -q dataclasses==$DATACLASSES_VERSION dataclasses-json==$DATACLASSES_JSON_VERSION
