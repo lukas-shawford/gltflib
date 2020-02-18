@@ -42,6 +42,6 @@ jobs:
   # https://docs.travis-ci.com/user/build-matrix/#excluding-jobs
   include:
   - python: 3.6
-    env:
-      - DATACLASSES_VERSION=0.6
-      - DATACLASSES_VERSION=0.7
+    env: DATACLASSES_VERSION=0.6
+  - python: 3.6
+    env: DATACLASSES_VERSION=0.7
