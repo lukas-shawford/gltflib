@@ -1,9 +1,63 @@
+# Travis CI Config
+#
+# This config runs all unit and end-to-end (rountrip) tests on every commit to the master branch, in all supported
+# Python versions (3.6+), and with various combinations of supported versions of dependencies.
+#
+# This library has only 2 direct dependencies (dataclasses and dataclasses-json), but they affect the behavior of the
+# library in critical ways. To ensure this library continues to work as changes are made and as new versions of
+# dependencies are released, this config runs performs a test run of the minimum specified versions of these libraries
+# (as specified in setup.py), as well as the latest versions.
+#
+# Note there is some duplication in the version numbers specified in setup.py, requirements.txt, and here (.travis.yml).
+# These will have to be kept in sync manually until I can figure out a better way.
+#
+# Note also there is a bit of a quirk with the dataclasses package, which complicates the config somewhat. Starting with
+# Python 3.7, dataclasses are built in to the language rather than being a package that you have to install. This makes
+# it a conditional dependency. This is handled in requirements.txt using an environment marker - see here for more
+# information:
+#
+# https://www.python.org/dev/peps/pep-0496/
+#
+# However, for Travis, that means we need to run a different set of install commands depending on Python version.
+# Further, we are interested in running tests on multiple versions of this package, again given how critical of a role
+# it plays for this library. To handle this, I found it easiest to specify Python 3.6 as a separate job that gets
+# appended to the jobs list via jobs.include, rather than listing it as an additional version and including it as part
+# of the build matrix. See here for more information:
+#
+# https://docs.travis-ci.com/user/build-matrix/#listing-individual-jobs
 language: python
-python:
-  - "3.6"
-  - "3.7"
-  - "3.8"
 script: scripts/run_tests.sh
 branches:
   only:
     - master
+# As noted above, Python 3.6 is also tested, but is specified separately via jobs.include (see below).
+python:
+  - "3.7"
+  - "3.8"
+env:
+  # Perform a test run on earliest supported version of dataclasses-json (as specified in setup.py).
+  # If tests fail, and it's non-trivial to fix, then this can be bumped to whatever is the new minimum version we can
+  # support. In that case, ensure to bump it both here, and in setup.py.
+  - DATACLASSES_JSON_VERSION=0.2.2
+  # Perform another test run on latest available version of dataclasses-json. This will need to be updated manually
+  # as new versions become available.
+  - DATACLASSES_JSON_VERSION=0.3.8
+install:
+  # Install original requirements (as specified in requirements.txt)
+  - pip install -q -r requirements.txt
+  # Override dataclasses-json with the version specified in the current test run
+  - pip install -q dataclasses-json==$DATACLASSES_JSON_VERSION
+  # For Python 3.6, install dataclasses library manually with the current version we're testing
+  - |
+    if [ $TRAVIS_PYTHON_VERSION == "3.6" ]; then
+      pip install -q dataclasses==$DATACLASSES_VERSION
+    fi
+# As noted above, Python 3.6 is specified separately since we only want to install dataclasses if we're on Python 3.6
+# (for 3.7+, it is built in). A separate entry is added for each version of dataclasses and dataclasses-json that we
+# want to test with.
+jobs:
+  include:
+  - python: 3.6
+    env: DATACLASSES_VERSION=0.6 DATACLASSES_JSON_VERSION=0.2.2
+  - python: 3.6
+    env: DATACLASSES_VERSION=0.7 DATACLASSES_JSON_VERSION=0.3.8
