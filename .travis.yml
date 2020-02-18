@@ -5,7 +5,6 @@ branches:
     - master
     - travis-test
 python:
-  - "3.6"
   - "3.7"
   - "3.8"
 env:
@@ -42,6 +41,6 @@ jobs:
   # https://docs.travis-ci.com/user/build-matrix/#excluding-jobs
   include:
   - python: 3.6
-    env: DATACLASSES_VERSION=0.6
+    env: DATACLASSES_VERSION=0.6 DATACLASSES_JSON_VERSION=0.2.2
   - python: 3.6
-    env: DATACLASSES_VERSION=0.7
+    env: DATACLASSES_VERSION=0.7 DATACLASSES_JSON_VERSION=0.3.8
