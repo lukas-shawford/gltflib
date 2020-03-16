@@ -18,7 +18,7 @@ pkginfo==1.5.0.1
 pycparser==2.19
 Pygments==2.5.2
 python-magic==0.4.15
-readme-renderer==24.0
+readme-renderer==25.0
 requests==2.23.0
 requests-toolbelt==0.9.1
 SecretStorage==3.1.2
