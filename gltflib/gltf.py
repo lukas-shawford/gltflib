@@ -398,14 +398,15 @@ class GLTF:
             raise RuntimeError('JSON chunk may not be empty')
         b = f.read(bytelen)
         if len(b) != bytelen:
-            raise RuntimeError(f'Unexpected EOF when parsing JSON chunk body. The GLB file may be corrupt.')
+            warnings.warn(f'Unexpected EOF when parsing JSON chunk body. The GLB file may be corrupt.', RuntimeWarning)
         model_json = b.decode('utf-8').strip()
         self.model = GLTFModel.from_json(model_json)
 
     def _load_glb_binary_chunk_body(self, f: BinaryIO, chunk_type: int, bytelen: int) -> None:
         b = f.read(bytelen)
         if len(b) != bytelen:
-            raise RuntimeError(f'Unexpected EOF when parsing binary chunk body. The GLB file may be corrupt.')
+            warnings.warn(f'Unexpected EOF when parsing binary chunk body. The GLB file may be corrupt.',
+                          RuntimeWarning)
         resource = GLBResource(b, chunk_type)
         self.resources.append(resource)
 

@@ -2189,3 +2189,20 @@ class TestGLTF(TestCase):
         resource = glb.resources[0]
         self.assertIsInstance(resource, GLBResource)
         self.assertEqual(b'', resource.data)
+
+    def test_load_glb_unexpected_eof_in_json_chunk_emits_warning(self):
+        """
+        Ensures loading a GLB with unexpected EOF in JSON chunk body emits a warning. As long as the JSON can still be
+        parsed successfully, no error should be raised.
+        """
+        # Act/Assert
+        with self.assertWarnsRegex(RuntimeWarning, "Unexpected EOF when parsing JSON chunk body"):
+            glb = GLTF.load(custom_sample('Corrupt/JsonChunkEOF.glb'))
+            self.assertEqual(GLTFModel(asset=Asset(version="2.0")), glb.model)
+
+    def test_load_glb_unexpected_eof_in_binary_chunk_body_emits_warning(self):
+        """Ensures loading a GLB with unexpected EOF in binary chunk body emits a warning."""
+        # Act/Assert
+        with self.assertWarnsRegex(RuntimeWarning, "Unexpected EOF when parsing binary chunk body"):
+            glb = GLTF.load(custom_sample('Corrupt/BinaryChunkEOF.glb'))
+            self.assertEqual(GLTFModel(asset=Asset(version="2.0")), glb.model)
