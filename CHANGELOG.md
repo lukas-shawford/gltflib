@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.0.5] - 2020-05-05
+
+### Changed
+- Emit runtime warning instead of error when encountering unexpected EOF
+
 ## [1.0.4] - 2020-02-16
 
 ### Added
