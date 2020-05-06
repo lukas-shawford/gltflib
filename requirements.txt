@@ -17,7 +17,7 @@ mypy-extensions==0.4.3
 pkginfo==1.5.0.1
 pycparser==2.20
 Pygments==2.6.1
-python-magic==0.4.17
+python-magic==0.4.18
 readme-renderer==26.0
 requests==2.23.0
 requests-toolbelt==0.9.1
