@@ -387,10 +387,14 @@ class GLTF:
                                f'got {len(b)} bytes.')
         chunk_length, = struct.unpack_from('<I', b, 0)
         chunk_type, = struct.unpack_from('<I', b, 4)
-        if chunk_type == GLB_JSON_CHUNK_TYPE:
-            self._load_glb_json_chunk_body(f, chunk_length)
-        else:
-            self._load_glb_binary_chunk_body(f, chunk_type, chunk_length)
+        try:
+            if chunk_type == GLB_JSON_CHUNK_TYPE:
+                self._load_glb_json_chunk_body(f, chunk_length)
+            else:
+                self._load_glb_binary_chunk_body(f, chunk_type, chunk_length)
+        except:
+            warnings.warn(f'GLB file length specified in file header ({bytelen}) does not match number of bytes '
+                          f'read ({pos}). The GLB file may be corrupt.', RuntimeWarning)
         return True
 
     def _load_glb_json_chunk_body(self, f: BinaryIO, bytelen: int) -> None:
