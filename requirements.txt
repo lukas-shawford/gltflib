@@ -4,7 +4,7 @@ cffi==1.14.0
 chardet==3.0.4
 cryptography==2.9.2
 dataclasses==0.7; python_version < '3.7'
-dataclasses-json==0.4.2
+dataclasses-json==0.4.3
 docutils==0.16
 idna==2.9
 importlib-metadata==1.6.0
