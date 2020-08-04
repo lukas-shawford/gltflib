@@ -24,7 +24,7 @@ requests-toolbelt==0.9.1
 SecretStorage==3.1.2
 six==1.14.0
 stringcase==1.2.0
-tqdm==4.46.0
+tqdm==4.48.2
 twine==3.1.1
 typing-extensions==3.7.4.2
 typing-inspect==0.6.0
