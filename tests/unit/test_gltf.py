@@ -473,7 +473,7 @@ class TestGLTF(TestCase):
             BufferView(buffer=0, byteOffset=36, byteLength=image_bytelen)
         ], model.bufferViews)
         # Embedded image should now point to a buffer view instead
-        self.assertEqual([Image(uri=image_filename, bufferView=6)], model.images)
+        self.assertEqual([Image(uri=None, bufferView=6)], model.images)
 
     def test_embed_missing_resource_raises_error(self):
         """Attempting to embed a resource that is not present in the resources list should raise a ValueError"""
@@ -643,8 +643,8 @@ class TestGLTF(TestCase):
         image = glb.model.images[0]
         self.assertIsInstance(image, Image)
         self.assertEqual(0, image.bufferView)
-        # Original image URI should still be retained (if bufferView is defined, it is used instead of uri)
-        self.assertEqual(image_filename, image.uri)
+        # Image URI should now be undefined since it is embedded
+        self.assertIsNone(image.uri)
         # MIME type is required if image is stored in a buffer. Ensure it got stored correctly based on what we
         # passed in via the FileResource (even if it's not technically the correct MIME type for a PNG image).
         self.assertEqual('image/jpeg', image.mimeType)
@@ -754,8 +754,8 @@ class TestGLTF(TestCase):
         image = glb.model.images[0]
         self.assertIsInstance(image, Image)
         self.assertEqual(4, image.bufferView)
-        # Image URI should be retained (if bufferView is defined, it is used instead of uri)
-        self.assertEqual(image_filename, image.uri)
+        # Image URI should now be undefined since it is embedded
+        self.assertIsNone(image.uri)
 
     def test_export_glb_with_embedded_image(self):
         """
@@ -1065,6 +1065,10 @@ class TestGLTF(TestCase):
         self.assertEqual(0, glb.model.images[0].bufferView)
         self.assertEqual(1, glb.model.images[1].bufferView)
         self.assertEqual(2, glb.model.images[2].bufferView)
+        # Ensure image URIs are undefined since they are now embedded
+        self.assertIsNone(glb.model.images[0].uri)
+        self.assertIsNone(glb.model.images[1].uri)
+        self.assertIsNone(glb.model.images[2].uri)
 
     def test_export_glb_with_all_resources_remaining_external(self):
         """
@@ -1241,6 +1245,8 @@ class TestGLTF(TestCase):
         self.assertEqual(resource.data, extracted_image_data)
         # MIME type should be automatically determined when loading the image
         self.assertEqual('image/png', image.mimeType)
+        # Image URI should be undefined since it is now embedded
+        self.assertIsNone(image.uri)
 
     def test_export_glb_with_resource_not_yet_loaded_without_embedding(self):
         """

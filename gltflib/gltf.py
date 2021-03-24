@@ -624,6 +624,8 @@ class GLTF:
                     if isinstance(resource, Base64Resource):
                         image.uri = None
                         image.mimeType = resource.mime_type
+                    elif isinstance(resource, FileResource):
+                        image.uri = None
 
     def _update_buffer_views_after_embedding_resource(self, buffer_index: int, offset: int):
         if self.model.bufferViews is not None:
