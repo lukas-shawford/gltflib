@@ -936,6 +936,136 @@ class TestGLTF(TestCase):
         self.assertIsInstance(image, Image)
         self.assertEqual(image_filename, image.uri)
 
+    def test_export_glb_with_more_than_two_resources(self):
+        """
+        When exporting a binary GLB file with more than two binary data resources, ensure that all resources are
+        embedded correctly. In particular, since we are adding a GLB buffer while also removing buffers that used to be
+        external files, ensure that no buffers are missed as we are iterating the buffers collection (which is being
+        modified during iteration).
+        """
+        # Arrange
+        # Sample buffer 1 data
+        buffer_1_filename = 'buffer_1.bin'
+        buffer_1_data = b'sample buffer one data'
+        buffer_1_bytelen = len(buffer_1_data)
+        # Sample buffer 2 data
+        buffer_2_filename = 'buffer_2.bin'
+        buffer_2_data = b'sample buffer two data'
+        buffer_2_bytelen = len(buffer_2_data)
+        # Sample buffer 3 data
+        buffer_3_filename = 'buffer_3.bin'
+        buffer_3_data = b'sample buffer three data'
+        buffer_3_bytelen = len(buffer_3_data)
+        # Create GLTF Model
+        model = GLTFModel(asset=Asset(version='2.0'),
+                          buffers=[
+                              Buffer(uri=buffer_1_filename, byteLength=buffer_1_bytelen),
+                              Buffer(uri=buffer_2_filename, byteLength=buffer_2_bytelen),
+                              Buffer(uri=buffer_3_filename, byteLength=buffer_3_bytelen)
+                          ],
+                          bufferViews=[
+                              BufferView(buffer=0, byteOffset=0, byteLength=10),
+                              BufferView(buffer=0, byteOffset=10, byteLength=12),
+                              BufferView(buffer=1, byteOffset=0, byteLength=10),
+                              BufferView(buffer=1, byteOffset=10, byteLength=12),
+                              BufferView(buffer=2, byteOffset=0, byteLength=10),
+                              BufferView(buffer=2, byteOffset=10, byteLength=14)
+                          ])
+        gltf = GLTF(model=model, resources=[
+            FileResource(filename=buffer_1_filename, data=buffer_1_data),
+            FileResource(filename=buffer_2_filename, data=buffer_2_data),
+            FileResource(filename=buffer_3_filename, data=buffer_3_data)
+        ])
+
+        # Act
+        # Export the GLB
+        filename = path.join(TEMP_DIR, 'test_export_glb_with_more_than_two_resources.glb')
+        gltf.export_glb(filename)
+
+        # Assert
+        # Read the file back in and verify expected structure
+        glb = GLTF.load_glb(filename)
+        self.assertEqual(model.asset, glb.model.asset)
+        self.assertEqual(1, len(glb.model.buffers))
+        buffer = glb.model.buffers[0]
+        self.assertIsInstance(buffer, Buffer)
+        # Buffer URI should be undefined since the data is now embedded
+        self.assertIsNone(buffer.uri)
+        # Ensure there is a single GLB resource
+        self.assertEqual(1, len(glb.resources))
+        glb_resource = glb.get_glb_resource()
+        self.assertIsInstance(glb_resource, GLBResource)
+        self.assertEqual(glb_resource, glb.resources[0])
+        # Binary data should be merged and its individual chunks null-padded so that they align to a 4-byte boundary
+        self.assertEqual(b'sample buffer one data\x00\x00sample buffer two data\x00\x00sample buffer three data',
+                         glb_resource.data)
+        self.assertEqual(72, buffer.byteLength)
+        # Buffer views should now point to the GLB buffer (index 0) and have their offsets adjusted based on the
+        # merged data.
+        self.assertEqual(BufferView(buffer=0, byteOffset=0, byteLength=10), glb.model.bufferViews[0])
+        self.assertEqual(BufferView(buffer=0, byteOffset=10, byteLength=12), glb.model.bufferViews[1])
+        self.assertEqual(BufferView(buffer=0, byteOffset=24, byteLength=10), glb.model.bufferViews[2])
+        self.assertEqual(BufferView(buffer=0, byteOffset=34, byteLength=12), glb.model.bufferViews[3])
+        self.assertEqual(BufferView(buffer=0, byteOffset=48, byteLength=10), glb.model.bufferViews[4])
+        self.assertEqual(BufferView(buffer=0, byteOffset=58, byteLength=14), glb.model.bufferViews[5])
+
+    def test_export_glb_with_more_than_two_images(self):
+        """
+        When exporting a binary GLB file with more than two image resources, ensure that all resources are embedded
+        correctly.
+        """
+        # Arrange
+        # Sample image 1
+        image_1_filename = 'sample_image_1.png'
+        image_1_data = b'sample image 1 data'
+        # Sample image 2
+        image_2_filename = 'sample_image_2.png'
+        image_2_data = b'sample image 2 data'
+        # Sample image 3
+        image_3_filename = 'sample_image_3.png'
+        image_3_data = b'sample image 3 data'
+        # Create GLTF Model
+        model = GLTFModel(asset=Asset(version='2.0'),
+                          images=[Image(uri=image_1_filename), Image(uri=image_2_filename), Image(uri=image_3_filename)])
+        gltf = GLTF(model=model, resources=[
+            FileResource(filename=image_1_filename, data=image_1_data, mimetype='image/jpeg'),
+            FileResource(filename=image_2_filename, data=image_2_data, mimetype='image/jpeg'),
+            FileResource(filename=image_3_filename, data=image_3_data, mimetype='image/jpeg')
+        ])
+
+        # Act
+        # Export the GLB
+        filename = path.join(TEMP_DIR, 'test_export_glb_with_more_than_two_images.glb')
+        gltf.export_glb(filename)
+
+        # Assert
+        # Read the file back in and verify expected structure
+        glb = GLTF.load_glb(filename, load_file_resources=True)
+        self.assertEqual(model.asset, glb.model.asset)
+        self.assertEqual(1, len(glb.model.buffers))
+        buffer = glb.model.buffers[0]
+        self.assertIsInstance(buffer, Buffer)
+        # Buffer URI should be undefined since the data is now embedded
+        self.assertIsNone(buffer.uri)
+        # Ensure there is only 1 resource since all images should now be embedded
+        self.assertEqual(1, len(glb.resources))
+        glb_resource = glb.get_glb_resource()
+        self.assertIsInstance(glb_resource, GLBResource)
+        self.assertEqual(glb_resource, glb.resources[0])
+        # Binary data should be merged and its individual chunks null-padded so that they align to a 4-byte boundary
+        self.assertEqual(b'sample image 1 data\x00sample image 2 data\x00sample image 3 data\x00',
+                         glb_resource.data)
+        self.assertEqual(60, buffer.byteLength)
+        # Buffer views should be created for each image
+        self.assertEqual(BufferView(buffer=0, byteOffset=0, byteLength=19), glb.model.bufferViews[0])
+        self.assertEqual(BufferView(buffer=0, byteOffset=20, byteLength=19), glb.model.bufferViews[1])
+        self.assertEqual(BufferView(buffer=0, byteOffset=40, byteLength=19), glb.model.bufferViews[2])
+        self.assertEqual(3, len(glb.model.bufferViews))
+        # Ensure images point to correct buffer views
+        self.assertEqual(0, glb.model.images[0].bufferView)
+        self.assertEqual(1, glb.model.images[1].bufferView)
+        self.assertEqual(2, glb.model.images[2].bufferView)
+
     def test_export_glb_with_all_resources_remaining_external(self):
         """
         Tests exporting a binary GLB file with all resources (buffer and image) remaining external.

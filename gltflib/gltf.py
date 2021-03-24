@@ -507,7 +507,7 @@ class GLTF:
     def _embed_buffer_resources(self):
         if self.model.buffers is None:
             return
-        for i, buffer in enumerate(self.model.buffers):
+        for i, buffer in list(enumerate(self.model.buffers)):
             if buffer.uri is not None:
                 resource = self.get_resource(buffer.uri)
                 if resource is None:
@@ -517,7 +517,7 @@ class GLTF:
     def _embed_image_resources(self):
         if self.model.images is None:
             return
-        for i, image in enumerate(self.model.images):
+        for i, image in list(enumerate(self.model.images)):
             if image.uri is not None and image.bufferView is None:
                 resource = self.get_resource(image.uri)
                 if resource is None:
