@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.0.6] - 2021-02-23
+
+### Fixed
+- Fixed issue with embedding more than 2 buffers when saving GLB
+- Set uri to undefined when embedding images
+
 ## [1.0.5] - 2020-05-05
 
 ### Changed
