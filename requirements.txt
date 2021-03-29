@@ -7,7 +7,7 @@ cryptography==3.4.6
 dataclasses-json==0.5.2
 docutils==0.16
 idna==2.10
-importlib-metadata==3.7.3
+importlib-metadata==3.9.0
 jeepney==0.6.0
 keyring==23.0.0
 marshmallow==3.10.0
