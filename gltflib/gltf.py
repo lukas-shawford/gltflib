@@ -53,7 +53,7 @@ class GLTF:
         :return: GLTF instance
         """
         gltf = GLTF(model=None, resources=resources)
-        with open(filename, 'r') as f:
+        with open(filename, 'r', encoding='utf-8', errors='replace') as f:
             data = f.read()
             gltf.model = GLTFModel.from_json(data)
         basepath = path.dirname(filename)
@@ -399,7 +399,7 @@ class GLTF:
         b = f.read(bytelen)
         if len(b) != bytelen:
             warnings.warn(f'Unexpected EOF when parsing JSON chunk body. The GLB file may be corrupt.', RuntimeWarning)
-        model_json = b.decode('utf-8').strip()
+        model_json = b.decode('utf-8', errors='replace').strip()
         self.model = GLTFModel.from_json(model_json)
 
     def _load_glb_binary_chunk_body(self, f: BinaryIO, chunk_type: int, bytelen: int) -> None:
@@ -419,7 +419,7 @@ class GLTF:
                             "exporting to GLTF, or export to GLB instead.")
         create_parent_dirs(filename)
         data = self.model.to_json()
-        with open(filename, 'w') as f:
+        with open(filename, 'w', encoding='utf-8') as f:
             f.write(data)
         if save_file_resources:
             self._validate_resources()
