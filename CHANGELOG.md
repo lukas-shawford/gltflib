@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.7] - 2021-04-11
+
+### Changed
+- Support non-conforming glTF/GLB files with wrong encoding for JSON data. Per the spec, glTF/GLB should
+use UTF-8 without BOM. However, the library now also supports reading files encoded with UTF-8 with BOM,
+UTF-16-LE, UTF-16-BE, and Windows-1252.
+
 ## [1.0.6] - 2021-02-23
 
 ### Fixed
