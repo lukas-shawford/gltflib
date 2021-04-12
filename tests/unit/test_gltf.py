@@ -2342,3 +2342,81 @@ class TestGLTF(TestCase):
         with self.assertWarnsRegex(RuntimeWarning, "Unexpected EOF when parsing binary chunk body"):
             glb = GLTF.load(custom_sample('Corrupt/BinaryChunkEOF.glb'))
             self.assertEqual(GLTFModel(asset=Asset(version="2.0")), glb.model)
+
+    def test_gltf_wrong_encoding(self):
+        """
+        Per the spec, glTF must use UTF-8 encoding without BOM for JSON data. However, the library should be forgiving
+        and still allow opening glTF files that were saved with the wrong encoding, as long as they can still be parsed
+        successfully. Any characters that could not be read will be replaced with a question mark.
+
+        This test ensures that non-binary (glTF) files with wrong encoding can be read successfully. See next test for
+        binary GLB files with wrong encoding in the JSON chunk.
+        """
+        # Act
+        utf8_bom = GLTF.load(custom_sample("BadEncoding/gltf/utf-8-bom.gltf"))
+        utf16_le = GLTF.load(custom_sample("BadEncoding/gltf/utf-16-le.gltf"))
+        utf16_be = GLTF.load(custom_sample("BadEncoding/gltf/utf-16-be.gltf"))
+        windows1252 = GLTF.load(custom_sample("BadEncoding/gltf/windows-1252.gltf"))
+
+        # Assert
+        self.assertEqual(GLTFModel(asset=Asset(version="2.0")), utf8_bom.model)
+        self.assertEqual(GLTFModel(asset=Asset(version="2.0")), utf16_le.model)
+        self.assertEqual(GLTFModel(asset=Asset(version="2.0")), utf16_be.model)
+        self.assertEqual(GLTFModel(asset=Asset(version="2.0", copyright='�Test� � Company')), windows1252.model)
+
+    def test_glb_wrong_encoding(self):
+        """
+        Per the spec, glTF must use UTF-8 encoding without BOM for JSON data. However, the library should be forgiving
+        and still allow opening glTF files that were saved with the wrong encoding, as long as they can still be parsed
+        successfully. Any characters that could not be read will be replaced with a question mark.
+
+        This test validates that the JSON chunk inside a binary GLB can still be read even if it is saved with the wrong
+        encoding. See previous test for non-binary (glTF) files with wrong encoding.
+        """
+        # Act
+        utf8_bom = GLTF.load(custom_sample("BadEncoding/glb/utf-8-bom.glb"))
+        utf16_le = GLTF.load(custom_sample("BadEncoding/glb/utf-16-le.glb"))
+        utf16_be = GLTF.load(custom_sample("BadEncoding/glb/utf-16-be.glb"))
+        windows1252 = GLTF.load(custom_sample("BadEncoding/glb/windows-1252.glb"))
+
+        # Assert
+        self.assertEqual(GLTFModel(asset=Asset(version="2.0")), utf8_bom.model)
+        self.assertEqual(GLTFModel(asset=Asset(version="2.0")), utf16_le.model)
+        self.assertEqual(GLTFModel(asset=Asset(version="2.0")), utf16_be.model)
+        self.assertEqual(GLTFModel(asset=Asset(version="2.0", copyright='�Test� � Company')), windows1252.model)
+
+    def test_gltf_windows_1252(self):
+        """
+        Test manually specifying an encoding (Windows-1252) when reading glTF.
+
+        Per the spec, glTF must use UTF-8 encoding without BOM for JSON data. However, the library should be forgiving
+        and still allow opening glTF files that were saved with the wrong encoding, as long as they can still be parsed
+        successfully. Any characters that could not be read will be replaced with a question mark.
+
+        In this example, the glTF file is saved using Windows-1252 encoding, and uses quote and dash characters from the
+        Windows-1252 code page. Ensure these characters can be read out successfully, in this case without being
+        replaced by question marks since the encoding was specified when loading the file.
+        """
+        # Act
+        gltf = GLTF.load(custom_sample("BadEncoding/gltf/windows-1252.gltf"), encoding='cp1252')
+
+        # Assert
+        self.assertEqual(GLTFModel(asset=Asset(version="2.0", copyright='“Test” – Company')), gltf.model)
+
+    def test_glb_windows_1252(self):
+        """
+        Test manually specifying an encoding (Windows-1252) when reading GLB.
+
+        Per the spec, glTF must use UTF-8 encoding without BOM for JSON data. However, the library should be forgiving
+        and still allow opening glTF files that were saved with the wrong encoding, as long as they can still be parsed
+        successfully. Any characters that could not be read will be replaced with a question mark.
+
+        In this example, the JSON chunk inside the GLB file is encoded using Windows-1252, and uses quote and dash
+        characters from the Windows-1252 code page. Ensure these characters can be read out successfully, in this case
+        without being replaced by question marks since the encoding was specified when loading the file.
+        """
+        # Act
+        gltf = GLTF.load(custom_sample("BadEncoding/glb/windows-1252.glb"), encoding='cp1252')
+
+        # Assert
+        self.assertEqual(GLTFModel(asset=Asset(version="2.0", copyright='“Test” – Company')), gltf.model)

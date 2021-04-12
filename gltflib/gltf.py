@@ -1,6 +1,7 @@
 import struct
 import copy
 import warnings
+import codecs
 from os import path
 from urllib.parse import urlparse
 from typing import Tuple, List, Iterator, Iterable, Optional, Set, BinaryIO
@@ -19,7 +20,8 @@ class GLTF:
         self.resources = resources
 
     @classmethod
-    def load(cls: 'GLTF', filename: str, load_file_resources=False, resources: List[GLTFResource] = None) -> 'GLTF':
+    def load(cls: 'GLTF', filename: str, load_file_resources=False, resources: List[GLTFResource] = None,
+             encoding: str = None) -> 'GLTF':
         """
         Loads a GLTF or GLB model from a filename. The model format will be inferred from the filename extension.
         :param filename: Path to the GLTF or GLB file
@@ -28,19 +30,25 @@ class GLTF:
         :param resources: Optional list of pre-loaded resources. Any resources referenced in the GLTF file that are
             present in the resources array will be used instead of loading those resources from the external
             source.
+        :param encoding: File encoding (if known) of the glTF file (if reading gltf), or the JSON block within the
+            GLB (if reading glb). Per the spec, glTF should use UTF-8 without BOM for JSON data. However, to accommodate
+            working with models that do not fully adhere to the spec, the file may be read with a different encoding.
+            If not passed in, the encoding will be guessed from one of several supported encodings (based on BOM),
+            defaulting to UTF-8 if cannot be inferred.
         :return: GLTF instance
         """
         ext = path.splitext(filename)[1].lower()
         if ext == '.gltf':
-            return cls.load_gltf(filename, load_file_resources, resources)
+            return cls.load_gltf(filename, load_file_resources, resources, encoding)
         elif ext == '.glb':
-            return cls.load_glb(filename, load_file_resources, resources)
+            return cls.load_glb(filename, load_file_resources, resources, encoding)
         raise RuntimeError(f'File format could not be inferred from filename: {filename}. Ensure the filename has '
                            f'the appropriate extension (.gltf or .glb), or call load_gltf or load_glb directly if '
                            f'the filename does not follow the convention but the format is known.')
 
     @classmethod
-    def load_gltf(cls: 'GLTF', filename: str, load_file_resources=False, resources: List[GLTFResource] = None)\
+    def load_gltf(cls: 'GLTF', filename: str, load_file_resources=False, resources: List[GLTFResource] = None,
+                  encoding: str = None)\
             -> 'GLTF':
         """
         Loads a model in GLTF format from a filename
@@ -50,18 +58,24 @@ class GLTF:
         :param resources: Optional list of pre-loaded resources. Any resources referenced in the GLTF file that are
             present in the resources array will be used instead of loading those resources from the external
             source.
+        :param encoding: File encoding (if known). Per the spec, glTF should use UTF-8 without BOM. However, to
+            accommodate working with models that do not fully adhere to the spec, the file may be read with a different
+            encoding. If not passed in, the encoding will be guessed from one of several supported encodings (based on
+            BOM), defaulting to UTF-8 if cannot be inferred.
         :return: GLTF instance
         """
         gltf = GLTF(model=None, resources=resources)
-        with open(filename, 'r') as f:
+        with open(filename, 'rb') as f:
             data = f.read()
-            gltf.model = GLTFModel.from_json(data)
+            json = GLTF._decode_str(data, encoding)
+            gltf.model = GLTFModel.from_json(json)
         basepath = path.dirname(filename)
         gltf._load_resources(basepath, load_file_resources)
         return gltf
 
     @classmethod
-    def load_glb(cls: 'GLTF', filename: str, load_file_resources=False, resources: List[GLTFResource] = None) -> 'GLTF':
+    def load_glb(cls: 'GLTF', filename: str, load_file_resources=False, resources: List[GLTFResource] = None,
+                 encoding: str = None) -> 'GLTF':
         """
         Loads a model in GLB format from a filename
         :param filename: Path to the GLB file
@@ -70,11 +84,15 @@ class GLTF:
         :param resources: Optional list of pre-loaded resources. Any resources referenced in the GLTF file that are
             present in the resources array will be used instead of loading those resources from the external
             source.
+        :param encoding: File encoding (if known) of the JSON chunk within the GLB. Per the spec, JSON data should be
+            encoded using UTF-8 (without BOM). However, to accommodate working with models that do not fully adhere to
+            the spec, the JSON chunk may be read with a different encoding. If not passed in, the encoding will be
+            guessed from one of several supported encodings (based on BOM), defaulting to UTF-8 if cannot be inferred.
         :return: GLTF instance
         """
         gltf = GLTF(model=None, resources=resources)
         with open(filename, 'rb') as f:
-            gltf._load_glb(f)
+            gltf._load_glb(f, encoding)
         basepath = path.dirname(filename)
         gltf._load_resources(basepath, load_file_resources)
         return gltf
@@ -334,6 +352,17 @@ class GLTF:
             resource.uri = uri
             return resource
 
+    @classmethod
+    def _decode_str(cls: 'GLTF', data: bytes, encoding: str = None) -> str:
+        if encoding is not None:
+            return data.decode(encoding, errors='replace')
+        elif data.startswith(codecs.BOM_UTF16_BE):
+            return data.decode('utf-16-be', errors='replace').lstrip('\ufeff')
+        elif data.startswith(codecs.BOM_UTF16_LE):
+            return data.decode('utf-16-le', errors='replace').lstrip('\ufeff')
+        else:
+            return data.decode('utf-8-sig', errors='replace')
+
     def _load_resources(self, basepath: str, autoload=False) -> None:
         self.resources = self.resources or []
         for uri in self._get_resource_uris_from_model():
@@ -354,10 +383,10 @@ class GLTF:
             if isinstance(resource, FileResource):
                 resource.export(basepath)
 
-    def _load_glb(self, f: BinaryIO) -> None:
+    def _load_glb(self, f: BinaryIO, json_encoding: str = None) -> None:
         self.resources = []
         bytelen = self._load_glb_header(f)
-        self._load_glb_chunks(f)
+        self._load_glb_chunks(f, json_encoding)
         pos = f.tell()
         if pos != bytelen:
             warnings.warn(f'GLB file length specified in file header ({bytelen}) does not match number of bytes '
@@ -374,11 +403,11 @@ class GLTF:
         bytelen, = struct.unpack_from('<I', b, 8)
         return bytelen
 
-    def _load_glb_chunks(self, f: BinaryIO) -> None:
-        while self._load_glb_chunk(f):
+    def _load_glb_chunks(self, f: BinaryIO, json_encoding: str = None) -> None:
+        while self._load_glb_chunk(f, json_encoding):
             pass
 
-    def _load_glb_chunk(self, f: BinaryIO) -> bool:
+    def _load_glb_chunk(self, f: BinaryIO, json_encoding: str = None) -> bool:
         b = f.read(8)
         if b == b'':
             return False
@@ -388,18 +417,18 @@ class GLTF:
         chunk_length, = struct.unpack_from('<I', b, 0)
         chunk_type, = struct.unpack_from('<I', b, 4)
         if chunk_type == GLB_JSON_CHUNK_TYPE:
-            self._load_glb_json_chunk_body(f, chunk_length)
+            self._load_glb_json_chunk_body(f, chunk_length, json_encoding)
         else:
             self._load_glb_binary_chunk_body(f, chunk_type, chunk_length)
         return True
 
-    def _load_glb_json_chunk_body(self, f: BinaryIO, bytelen: int) -> None:
+    def _load_glb_json_chunk_body(self, f: BinaryIO, bytelen: int, json_encoding: str = None) -> None:
         if bytelen == 0:
             raise RuntimeError('JSON chunk may not be empty')
         b = f.read(bytelen)
         if len(b) != bytelen:
             warnings.warn(f'Unexpected EOF when parsing JSON chunk body. The GLB file may be corrupt.', RuntimeWarning)
-        model_json = b.decode('utf-8').strip()
+        model_json = GLTF._decode_str(b, json_encoding)
         self.model = GLTFModel.from_json(model_json)
 
     def _load_glb_binary_chunk_body(self, f: BinaryIO, chunk_type: int, bytelen: int) -> None:
@@ -419,7 +448,7 @@ class GLTF:
                             "exporting to GLTF, or export to GLB instead.")
         create_parent_dirs(filename)
         data = self.model.to_json()
-        with open(filename, 'w') as f:
+        with open(filename, 'w', encoding='utf-8') as f:
             f.write(data)
         if save_file_resources:
             self._validate_resources()
