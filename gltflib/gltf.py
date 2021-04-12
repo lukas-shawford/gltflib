@@ -67,7 +67,7 @@ class GLTF:
         gltf = GLTF(model=None, resources=resources)
         with open(filename, 'rb') as f:
             data = f.read()
-            json = GLTF._decode_str(data, encoding)
+            json = GLTF._decode_bytes(data, encoding)
             gltf.model = GLTFModel.from_json(json)
         basepath = path.dirname(filename)
         gltf._load_resources(basepath, load_file_resources)
@@ -353,7 +353,7 @@ class GLTF:
             return resource
 
     @classmethod
-    def _decode_str(cls: 'GLTF', data: bytes, encoding: str = None) -> str:
+    def _decode_bytes(cls: 'GLTF', data: bytes, encoding: str = None) -> str:
         if encoding is not None:
             return data.decode(encoding, errors='replace')
         elif data.startswith(codecs.BOM_UTF16_BE):
@@ -361,6 +361,8 @@ class GLTF:
         elif data.startswith(codecs.BOM_UTF16_LE):
             return data.decode('utf-16-le', errors='replace').lstrip('\ufeff')
         else:
+            # Decode using utf-8-sig (instead of utf-8) to handle UTF-8 with and without BOM.
+            # If BOM is present, it will be automatically stripped out.
             return data.decode('utf-8-sig', errors='replace')
 
     def _load_resources(self, basepath: str, autoload=False) -> None:
@@ -428,7 +430,7 @@ class GLTF:
         b = f.read(bytelen)
         if len(b) != bytelen:
             warnings.warn(f'Unexpected EOF when parsing JSON chunk body. The GLB file may be corrupt.', RuntimeWarning)
-        model_json = GLTF._decode_str(b, json_encoding)
+        model_json = GLTF._decode_bytes(b, json_encoding)
         self.model = GLTFModel.from_json(model_json)
 
     def _load_glb_binary_chunk_body(self, f: BinaryIO, chunk_type: int, bytelen: int) -> None:
