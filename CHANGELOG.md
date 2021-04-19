@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.0.8] - 2021-04-19
+
+### Fixed
+- Set MIME type correctly when embedding file-based image resources.
+
 ## [1.0.7] - 2021-04-11
 
 ### Changed
