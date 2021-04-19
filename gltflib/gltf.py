@@ -554,8 +554,6 @@ class GLTF:
                 if resource is None:
                     raise RuntimeError(f'Missing resource: "{image.uri}" (referenced in image with index {i})')
                 self.embed_resource(resource)
-                if isinstance(resource, FileResource) and resource.mimetype:
-                    image.mimeType = resource.mimetype
 
     def _get_glb_buffer(self):
         """
@@ -650,13 +648,12 @@ class GLTF:
             for i, image in enumerate(self.model.images):
                 if image.uri == resource.uri:
                     image.bufferView = self._create_embedded_image_buffer_view(offset, bytelen)
-                    # If the resource is a Base64 resource, then delete the image URI so we're not representing the
-                    # data twice, and preserve the MIME type.
                     if isinstance(resource, Base64Resource):
                         image.uri = None
                         image.mimeType = resource.mime_type
                     elif isinstance(resource, FileResource):
                         image.uri = None
+                        image.mimeType = resource.mimetype
 
     def _update_buffer_views_after_embedding_resource(self, buffer_index: int, offset: int):
         if self.model.bufferViews is not None:
