@@ -473,7 +473,7 @@ class TestGLTF(TestCase):
             BufferView(buffer=0, byteOffset=36, byteLength=image_bytelen)
         ], model.bufferViews)
         # Embedded image should now point to a buffer view instead
-        self.assertEqual([Image(uri=None, bufferView=6)], model.images)
+        self.assertEqual([Image(uri=None, bufferView=6, mimeType='image/jpeg')], model.images)
 
     def test_embed_missing_resource_raises_error(self):
         """Attempting to embed a resource that is not present in the resources list should raise a ValueError"""
