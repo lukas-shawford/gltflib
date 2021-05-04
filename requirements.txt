@@ -16,7 +16,7 @@ mypy-extensions==0.4.3
 packaging==20.9
 pkginfo==1.7.0
 pycparser==2.20
-Pygments==2.8.1
+Pygments==2.9.0
 pyparsing==2.4.7
 python-magic==0.4.22
 readme-renderer==29.0
