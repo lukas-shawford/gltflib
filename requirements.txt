@@ -24,7 +24,7 @@ requests==2.25.1
 requests-toolbelt==0.9.1
 rfc3986==1.4.0
 SecretStorage==3.3.1
-six==1.15.0
+six==1.16.0
 stringcase==1.2.0
 tqdm==4.60.0
 twine==3.4.1
