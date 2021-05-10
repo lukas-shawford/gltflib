@@ -22,7 +22,7 @@ python-magic==0.4.22
 readme-renderer==29.0
 requests==2.25.1
 requests-toolbelt==0.9.1
-rfc3986==1.4.0
+rfc3986==1.5.0
 SecretStorage==3.3.1
 six==1.15.0
 stringcase==1.2.0
