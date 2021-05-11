@@ -10,7 +10,7 @@ idna==2.10
 importlib-metadata==3.10.0
 jeepney==0.6.0
 keyring==23.0.1
-marshmallow==3.11.1
+marshmallow==3.12.1
 marshmallow-enum==1.5.1
 mypy-extensions==0.4.3
 packaging==20.9
