@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.9] - 2021-07-08
+
+### Fixed
+- Ensure dataclasses install requirement is only applied for Python 3.6 in setup.py (dataclasses is
+  available natively in Python 3.7+). This fixes an issue that can occur when this package is
+  consumed in some scenarios (e.g., executable packaging).
+
 ## [1.0.8] - 2021-04-19
 
 ### Fixed
