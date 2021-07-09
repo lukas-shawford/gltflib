@@ -39,7 +39,7 @@ env:
   # Perform a test run on earliest supported version of dataclasses-json (as specified in setup.py).
   # If tests fail, and it's non-trivial to fix, then this can be bumped to whatever is the new minimum version we can
   # support. In that case, ensure to bump it both here, and in setup.py.
-  - DATACLASSES_JSON_VERSION=0.2.2
+  - DATACLASSES_JSON_VERSION=0.4.5
   # Perform another test run on latest available version of dataclasses-json. This will need to be updated manually
   # as new versions become available.
   - DATACLASSES_JSON_VERSION=0.5.4
@@ -60,5 +60,7 @@ jobs:
   include:
   - python: 3.6
     env: DATACLASSES_VERSION=0.6 DATACLASSES_JSON_VERSION=0.2.2
+  - python: 3.6
+    env: DATACLASSES_VERSION=0.6 DATACLASSES_JSON_VERSION=0.4.5
   - python: 3.6
     env: DATACLASSES_VERSION=0.7 DATACLASSES_JSON_VERSION=0.5.4

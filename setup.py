@@ -20,7 +20,7 @@ REQUIRES_PYTHON = '>=3.6.0'
 # Required packages
 REQUIRED = [
     'dataclasses>=0.6; python_version < "3.7"',
-    'dataclasses-json>=0.2.2'
+    'dataclasses-json>=0.4.5'
 ]
 
 # Optional packages
