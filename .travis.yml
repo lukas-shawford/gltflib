@@ -34,6 +34,7 @@ branches:
 python:
   - "3.7"
   - "3.8"
+  - "3.9"
 env:
   # Perform a test run on earliest supported version of dataclasses-json (as specified in setup.py).
   # If tests fail, and it's non-trivial to fix, then this can be bumped to whatever is the new minimum version we can
