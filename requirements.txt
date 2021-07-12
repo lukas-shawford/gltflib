@@ -15,7 +15,7 @@ marshmallow==3.12.2
 marshmallow-enum==1.5.1
 mypy-extensions==0.4.3
 packaging==21.0
-pkginfo==1.7.0
+pkginfo==1.7.1
 pycparser==2.20
 Pygments==2.9.0
 pyparsing==2.4.7
