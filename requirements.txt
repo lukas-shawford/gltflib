@@ -28,7 +28,7 @@ SecretStorage==3.3.1
 six==1.16.0
 stringcase==1.2.0
 tqdm==4.61.2
-twine==3.4.1
+twine==3.4.2
 typing-extensions==3.10.0.0
 typing-inspect==0.7.1
 urllib3==1.26.6
