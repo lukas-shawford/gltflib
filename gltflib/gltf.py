@@ -620,7 +620,7 @@ class GLTF:
             for buffer_view in self.model.bufferViews:
                 if buffer_view.buffer == buffer_index:
                     buffer_view.buffer = 0
-                    buffer_view.byteOffset += glb_offset
+                    buffer_view.byteOffset = (buffer_view.byteOffset or 0) + glb_offset
 
     def _create_embedded_image_buffer_view(self, byte_offset: int, byte_length: int):
         buffer_view = BufferView(buffer=0, byteOffset=byte_offset, byteLength=byte_length)
@@ -660,7 +660,7 @@ class GLTF:
             for buffer_view in self.model.bufferViews:
                 if buffer_view.buffer == buffer_index:
                     buffer_view.buffer = 0
-                    buffer_view.byteOffset += offset
+                    buffer_view.byteOffset = (buffer_view.byteOffset or 0) + offset
 
     def _unembed_glb(self, uri: str) -> None:
         """
