@@ -1,11 +1,11 @@
-import struct
 import base64
 import mimetypes
-from os import path
+import struct
 from abc import ABC, abstractmethod
+from os import path
 from typing import Optional
+from urllib.parse import quote
 from .utils import create_parent_dirs
-
 
 GLB_JSON_CHUNK_TYPE, = struct.unpack('<I', b'JSON')
 GLB_BINARY_CHUNK_TYPE, = struct.unpack('<I', b'BIN\x00')
@@ -16,6 +16,7 @@ class GLTFResource(ABC):
     Base class for a GLTF resource representation containing binary data. Note that depending on the resource type, the
     data may or may not actually be available to be consumed directly.
     """
+
     def __init__(self, uri: Optional[str], data: bytes = None):
         self._uri = uri
         self._data = data
@@ -46,7 +47,7 @@ class FileResource(GLTFResource):
 
     def __init__(self, filename: str = None, basepath: str = None, autoload=False, data: bytes = None,
                  mimetype: str = None):
-        super(FileResource, self).__init__(filename, data)
+        super(FileResource, self).__init__(quote(filename), data)
         self.filename = filename
         self._loaded = self._data is not None
         self._basepath = basepath
@@ -55,7 +56,7 @@ class FileResource(GLTFResource):
             self.load()
 
     def __repr__(self):
-        return f'FileResource({self.filename})'
+        return f'FileResource("{self.filename}")'
 
     @property
     def loaded(self):
@@ -97,6 +98,7 @@ class ExternalResource(GLTFResource):
     External GLTF resource referenced by URI. These resources are assumed to exist, and will not be loaded when
     importing or saved when exporting.
     """
+
     def __init__(self, uri: str):
         super(ExternalResource, self).__init__(uri)
 
@@ -123,6 +125,7 @@ class GLBResource(GLTFResource):
     """
     Embedded GLTF resource inside a Binary glTF (GLB).
     """
+
     def __init__(self, data: bytes, resource_type: int = GLB_BINARY_CHUNK_TYPE):
         super(GLBResource, self).__init__(None, data)
         self._resource_type = resource_type

@@ -1026,7 +1026,8 @@ class TestGLTF(TestCase):
         image_3_data = b'sample image 3 data'
         # Create GLTF Model
         model = GLTFModel(asset=Asset(version='2.0'),
-                          images=[Image(uri=image_1_filename), Image(uri=image_2_filename), Image(uri=image_3_filename)])
+                          images=[Image(uri=image_1_filename), Image(uri=image_2_filename),
+                                  Image(uri=image_3_filename)])
         gltf = GLTF(model=model, resources=[
             FileResource(filename=image_1_filename, data=image_1_data, mimetype='image/jpeg'),
             FileResource(filename=image_2_filename, data=image_2_data, mimetype='image/jpeg'),
@@ -1239,7 +1240,7 @@ class TestGLTF(TestCase):
         image_buffer_view = exported_glb.model.bufferViews[image.bufferView]
         offset = image_buffer_view.byteOffset
         bytelen = image_buffer_view.byteLength
-        extracted_image_data = glb_resource.data[offset:(offset+bytelen)]
+        extracted_image_data = glb_resource.data[offset:(offset + bytelen)]
         # Ensure image data matches
         resource.load()
         self.assertEqual(resource.data, extracted_image_data)
@@ -2420,3 +2421,26 @@ class TestGLTF(TestCase):
 
         # Assert
         self.assertEqual(GLTFModel(asset=Asset(version="2.0", copyright='“Test” – Company')), gltf.model)
+
+    def test_uri_encoding_load(self):
+        """
+        URIs can be encoded (see https://github.com/KhronosGroup/glTF/issues/1449).
+        """
+        # Act / Assert
+        GLTF.load(sample('Box With Spaces'))
+
+    def test_uri_encoding_save(self):
+        """
+        URIs should be encoded (see https://github.com/KhronosGroup/glTF/issues/1449).
+        """
+        # Act
+        file_resource = FileResource('File Resource.bin', data=b'')
+        model = GLTFModel(
+            asset=Asset(version='2.0'),
+        )
+        gltf = GLTF(model=model, resources=[file_resource])
+
+        # Assert
+        self.assertEqual(gltf.get_resource('File%20Resource.bin'), file_resource)
+        self.assertEqual(gltf.get_resource('File Resource.bin'), file_resource)
+        self.assertEqual(gltf.get_resource('File Resource.bin', strict=True), None)

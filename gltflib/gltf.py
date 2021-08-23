@@ -3,7 +3,7 @@ import copy
 import warnings
 import codecs
 from os import path
-from urllib.parse import urlparse
+from urllib.parse import urlparse, unquote
 from typing import Tuple, List, Iterator, Iterable, Optional, Set, BinaryIO
 from .gltf_resource import (
     GLTFResource, FileResource, ExternalResource, GLBResource, Base64Resource, GLB_JSON_CHUNK_TYPE,
@@ -48,7 +48,7 @@ class GLTF:
 
     @classmethod
     def load_gltf(cls: 'GLTF', filename: str, load_file_resources=False, resources: List[GLTFResource] = None,
-                  encoding: str = None)\
+                  encoding: str = None) \
             -> 'GLTF':
         """
         Loads a model in GLTF format from a filename
@@ -164,8 +164,16 @@ class GLTF:
         resources = None if self.resources is None else [resource.clone() for resource in self.resources]
         return GLTF(model, resources)
 
-    def get_resource(self, uri: str) -> GLTFResource:
-        return next((resource for resource in (self.resources or []) if resource.uri == uri), None)
+    def get_resource(self, uri: str, strict: bool = False) -> GLTFResource:
+        return next((
+            resource
+            for resource in (self.resources or [])
+            if uri in
+               (
+                   {resource.uri} if not isinstance(resource, FileResource) or strict
+                   else {resource.uri, resource.filename}
+               )
+        ), None)
 
     def get_glb_resource(self, resource_type: int = GLB_BINARY_CHUNK_TYPE) -> GLBResource:
         for resource in self.glb_resources:
@@ -257,7 +265,7 @@ class GLTF:
             raise ValueError('ExternalResource may not be converted to a FileResource (accessing ExternalResource '
                              'data is not yet supported.)')
 
-    def convert_to_base64_resource(self, resource: GLTFResource, mime_type: str = 'application/octet-stream')\
+    def convert_to_base64_resource(self, resource: GLTFResource, mime_type: str = 'application/octet-stream') \
             -> Base64Resource:
         """
         Converts a given GLTFResource to a Base64Resource.
@@ -760,5 +768,5 @@ def _get_resource(uri, basepath: str, autoload=False) -> Optional[GLTFResource]:
     elif scheme == 'data':
         return Base64Resource.from_uri(uri)
     elif not scheme:
-        return FileResource(uri, basepath, autoload)
+        return FileResource(unquote(uri), basepath, autoload)
     return None
