@@ -1,7 +1,7 @@
-from enum import Enum
+from enum import IntEnum
 
 
-class PrimitiveMode(Enum):
+class PrimitiveMode(IntEnum):
     POINTS = 0
     LINES = 1
     LINE_LOOP = 2

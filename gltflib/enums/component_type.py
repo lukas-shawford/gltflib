@@ -1,7 +1,7 @@
-from enum import Enum
+from enum import IntEnum
 
 
-class ComponentType(Enum):
+class ComponentType(IntEnum):
     BYTE = 5120
     UNSIGNED_BYTE = 5121
     SHORT = 5122
