@@ -22,7 +22,7 @@ fi
 source env/bin/activate
 
 # Ensure wheel and setuptools are installed
-pip install wheel==0.33.0 setuptools==39.0.1
+pip install wheel==0.37.0 setuptools==57.4.0
 
 # Install dependencies
 pip install -r requirements.txt
