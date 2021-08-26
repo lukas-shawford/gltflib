@@ -2426,8 +2426,22 @@ class TestGLTF(TestCase):
         """
         URIs can be encoded (see https://github.com/KhronosGroup/glTF/issues/1449).
         """
-        # Act / Assert
-        GLTF.load(sample('Box With Spaces'))
+        # Act
+        gltf = GLTF.load(sample('Box With Spaces'))
+
+        # Assert
+        self.assertEqual(set(resource.uri for resource in gltf.resources), {
+            'Roughness%20Metallic.png',
+            'Normal%20Map.png',
+            'glTF%20Logo%20With%20Spaces.png',
+            'Box%20With%20Spaces.bin',
+        })
+        self.assertEqual(set(resource.filename for resource in gltf.resources), {
+            'Roughness Metallic.png',
+            'Normal Map.png',
+            'glTF Logo With Spaces.png',
+            'Box With Spaces.bin',
+        })
 
     def test_uri_encoding_save(self):
         """
@@ -2441,6 +2455,59 @@ class TestGLTF(TestCase):
         gltf = GLTF(model=model, resources=[file_resource])
 
         # Assert
+        self.assertEqual(file_resource.uri, 'File%20Resource.bin')
+        self.assertEqual(file_resource.filename, 'File Resource.bin')
         self.assertEqual(gltf.get_resource('File%20Resource.bin'), file_resource)
         self.assertEqual(gltf.get_resource('File Resource.bin'), file_resource)
         self.assertEqual(gltf.get_resource('File Resource.bin', strict=True), None)
+
+        # Act/Assert
+        gltf.export(path.join(TEMP_DIR, 'uri_encoding_save.gltf'))
+
+    def test_uri_encoding_load_save(self):
+        """
+        URIs can be encoded (see https://github.com/KhronosGroup/glTF/issues/1449).
+        """
+        # Act/Assert
+        gltf = GLTF.load(sample('Box With Spaces'), load_file_resources=True)
+        gltf.export(path.join(TEMP_DIR, 'uri_encoding_load_save.gltf'))
+
+    def test_uri_encoding_save_mixed(self):
+        """
+        URIs may be encoded and not encoded (see https://github.com/KhronosGroup/glTF/issues/1449).
+        """
+        # Act
+        file_resource = FileResource('File Resource.bin', data=b'')
+        model = GLTFModel(
+            asset=Asset(version='2.0'),
+            buffers=[
+                Buffer(uri=file_resource.filename, byteLength=0),
+                Buffer(uri=file_resource.uri, byteLength=0),
+            ]
+        )
+        gltf = GLTF(model=model, resources=[file_resource])
+
+        # Act/Assert
+        gltf.export(path.join(TEMP_DIR, 'uri_encoding_save_mixed.gltf'))
+
+    def test_uri_encoding_validate_mixed(self):
+        """
+        URIs may be encoded and not encoded (see https://github.com/KhronosGroup/glTF/issues/1449).
+        """
+        # Act
+        file_resource = FileResource('File Resource.bin', data=b'')
+        model = GLTFModel(
+            asset=Asset(version='2.0'),
+            buffers=[
+                Buffer(uri=file_resource.filename, byteLength=0),
+                Buffer(uri=file_resource.uri, byteLength=0),
+            ]
+        )
+        gltf = GLTF(model=model, resources=[file_resource])
+
+        # Act/Assert
+        gltf._validate_resources()
+
+        # Act/Assert
+        gltf.convert_to_base64_resource(file_resource)
+        gltf._validate_resources()

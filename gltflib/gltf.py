@@ -241,15 +241,17 @@ class GLTF:
         if isinstance(resource, FileResource):
             if resource.filename == filename:
                 return resource
-            self._update_model_resources_by_uri(resource.filename, filename)
-            resource.filename = filename
-            return resource
+            resource.load()
+            file_resource = FileResource(filename, data=resource.data, mimetype=resource.mimetype)
+            self._update_model_resources_by_uri(resource.uri, file_resource.uri)
+            if resource.uri != resource.filename:
+                self._update_model_resources_by_uri(resource.filename, file_resource.uri)
+            self.resources[self.resources.index(resource)] = file_resource
+            return file_resource
         if isinstance(resource, Base64Resource):
             file_resource = FileResource(filename, data=resource.data, mimetype=resource.mime_type)
-            self._update_model_resources_by_uri(resource.uri, filename)
-            i = self.resources.index(resource)
-            self.resources.pop(i)
-            self.resources.insert(i, file_resource)
+            self._update_model_resources_by_uri(resource.uri, file_resource.uri)
+            self.resources[self.resources.index(resource)] = file_resource
             return file_resource
         if isinstance(resource, GLBResource):
             assert resource is self.get_glb_resource()
@@ -294,9 +296,9 @@ class GLTF:
             resource.load()
             base64_resource = Base64Resource(resource.data, mime_type)
             self._update_model_resources_by_uri(resource.uri, base64_resource.uri)
-            i = self.resources.index(resource)
-            self.resources.pop(i)
-            self.resources.insert(i, base64_resource)
+            if resource.uri != resource.filename:
+                self._update_model_resources_by_uri(resource.filename, base64_resource.uri)
+            self.resources[self.resources.index(resource)] = base64_resource
             return base64_resource
         if isinstance(resource, Base64Resource):
             return resource
@@ -341,9 +343,9 @@ class GLTF:
         if isinstance(resource, FileResource) or isinstance(resource, Base64Resource):
             external_resource = ExternalResource(uri)
             self._update_model_resources_by_uri(resource.uri, uri)
-            i = self.resources.index(resource)
-            self.resources.pop(i)
-            self.resources.insert(i, external_resource)
+            if isinstance(resource, FileResource) and resource.uri != resource.filename:
+                self._update_model_resources_by_uri(resource.filename, uri)
+            self.resources[self.resources.index(resource)] = external_resource
             return external_resource
         if isinstance(resource, GLBResource):
             assert resource is self.get_glb_resource()
