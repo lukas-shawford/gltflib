@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.0.11](https://github.com/sergkr/gltflib/releases/tag/v1.0.11) - 2021-08-28
+
+### Fixed
+- Handle some inconsistencies with URI encoding during conversion.
+
 ## [1.0.10](https://github.com/sergkr/gltflib/releases/tag/v1.0.10) - 2021-08-22
 
 ### Fixed
