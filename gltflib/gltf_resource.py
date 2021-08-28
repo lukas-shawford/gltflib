@@ -48,7 +48,7 @@ class FileResource(GLTFResource):
     def __init__(self, filename: str = None, basepath: str = None, autoload=False, data: bytes = None,
                  mimetype: str = None):
         super(FileResource, self).__init__(quote(filename), data)
-        self.filename = filename
+        self._filename = filename
         self._loaded = self._data is not None
         self._basepath = basepath
         self._mimetype = mimetype
@@ -56,7 +56,11 @@ class FileResource(GLTFResource):
             self.load()
 
     def __repr__(self):
-        return f'FileResource("{self.filename}")'
+        return f'FileResource("{self._filename}")'
+
+    @property
+    def filename(self):
+        return self._filename
 
     @property
     def loaded(self):
@@ -69,28 +73,28 @@ class FileResource(GLTFResource):
     def load(self, force_reload=False):
         if self._loaded and not force_reload:
             return
-        if not self.filename:
+        if not self._filename:
             raise ValueError("Attempted to load FileResource without filename")
-        filename = path.join(self._basepath, self.filename) if self._basepath is not None else self.filename
+        filename = path.join(self._basepath, self._filename) if self._basepath is not None else self._filename
         with open(filename, 'rb') as f:
             self._data = f.read()
             self._mimetype = self._mimetype or mimetypes.guess_type(filename)[0]
         self._loaded = True
 
     def export(self, basepath: str = None) -> None:
-        if not self.filename:
+        if not self._filename:
             raise ValueError("Attempted to export FileResource without filename")
         self.load()
         if self._data is None:
             raise ValueError("Attempted to export FileResource without data")
         basepath = basepath if basepath is not None else self._basepath
-        filename = path.join(basepath, self.filename) if basepath is not None else self.filename
+        filename = path.join(basepath, self._filename) if basepath is not None else self._filename
         create_parent_dirs(filename)
         with open(filename, 'wb') as f:
             f.write(self._data)
 
     def clone(self) -> 'FileResource':
-        return FileResource(self.filename, self._basepath, False, self._data, self._mimetype)
+        return FileResource(self._filename, self._basepath, False, self._data, self._mimetype)
 
 
 class ExternalResource(GLTFResource):
