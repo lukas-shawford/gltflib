@@ -1,15 +1,15 @@
-bleach==4.0.0
+bleach==4.1.0
 certifi==2021.5.30
 cffi==1.14.6
 chardet==4.0.0
 charset-normalizer==2.0.4
 colorama==0.4.4
-cryptography==3.4.7
+cryptography==3.4.8
 dataclasses==0.7; python_version < '3.7'
-dataclasses-json==0.5.4
+dataclasses-json==0.5.5
 docutils==0.17.1
 idna==2.10
-importlib-metadata==4.6.4
+importlib-metadata==4.7.1
 jeepney==0.7.1
 keyring==23.1.0
 marshmallow==3.13.0
@@ -28,7 +28,7 @@ rfc3986==1.5.0
 SecretStorage==3.3.1
 six==1.16.0
 stringcase==1.2.0
-tqdm==4.62.1
+tqdm==4.62.2
 twine==3.4.2
 typing-extensions==3.10.0.0
 typing-inspect==0.7.1
