@@ -9,7 +9,7 @@ dataclasses==0.7; python_version < '3.7'
 dataclasses-json==0.5.5
 docutils==0.17.1
 idna==2.10
-importlib-metadata==4.7.1
+importlib-metadata==4.8.1
 jeepney==0.7.1
 keyring==23.1.0
 marshmallow==3.13.0
