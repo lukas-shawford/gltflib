@@ -30,7 +30,7 @@ six==1.16.0
 stringcase==1.2.0
 tqdm==4.62.2
 twine==3.4.2
-typing-extensions==3.10.0.0
+typing-extensions==3.10.0.2
 typing-inspect==0.7.1
 urllib3==1.26.6
 webencodings==0.5.1
