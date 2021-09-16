@@ -2462,7 +2462,7 @@ class TestGLTF(TestCase):
         self.assertEqual(gltf.get_resource('File Resource.bin', strict=True), None)
 
         # Act/Assert
-        gltf.export(path.join(TEMP_DIR, 'uri_encoding_save.gltf'))
+        gltf.export(path.join(TEMP_DIR, 'uri_encoding_save.glb'))
 
     def test_uri_encoding_load_save(self):
         """
@@ -2470,7 +2470,7 @@ class TestGLTF(TestCase):
         """
         # Act/Assert
         gltf = GLTF.load(sample('Box With Spaces'), load_file_resources=True)
-        gltf.export(path.join(TEMP_DIR, 'uri_encoding_load_save.gltf'))
+        gltf.export(path.join(TEMP_DIR, 'uri_encoding_load_save.glb'))
 
     def test_uri_encoding_save_mixed(self):
         """
@@ -2488,9 +2488,9 @@ class TestGLTF(TestCase):
         gltf = GLTF(model=model, resources=[file_resource])
 
         # Act/Assert
-        gltf.export(path.join(TEMP_DIR, 'uri_encoding_save_mixed.gltf'))
+        gltf.export(path.join(TEMP_DIR, 'uri_encoding_save_mixed.glb'))
 
-    def test_uri_encoding_validate_mixed(self):
+    def test_uri_encoding_validate_mixed_base64(self):
         """
         URIs may be encoded and not encoded (see https://github.com/KhronosGroup/glTF/issues/1449).
         """
@@ -2510,4 +2510,26 @@ class TestGLTF(TestCase):
 
         # Act/Assert
         gltf.convert_to_base64_resource(file_resource)
+        gltf._validate_resources()
+
+    def test_uri_encoding_validate_mixed_embed(self):
+        """
+        URIs may be encoded and not encoded (see https://github.com/KhronosGroup/glTF/issues/1449).
+        """
+        # Act
+        file_resource = FileResource('File Resource.bin', data=b'')
+        model = GLTFModel(
+            asset=Asset(version='2.0'),
+            buffers=[
+                Buffer(uri=file_resource.filename, byteLength=0),
+                Buffer(uri=file_resource.uri, byteLength=0),
+            ]
+        )
+        gltf = GLTF(model=model, resources=[file_resource])
+
+        # Act/Assert
+        gltf._validate_resources()
+
+        # Act/Assert
+        gltf.embed_resource(file_resource)
         gltf._validate_resources()

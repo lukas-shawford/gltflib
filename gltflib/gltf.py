@@ -548,22 +548,42 @@ class GLTF:
     def _embed_buffer_resources(self):
         if self.model.buffers is None:
             return
-        for i, buffer in list(enumerate(self.model.buffers)):
-            if buffer.uri is not None:
+
+        enumerated_buffers = None
+        while enumerated_buffers is None:
+            enumerated_buffers = enumerate(iter(self.model.buffers))
+            for i, buffer in enumerated_buffers:
+                if buffer.uri is None:
+                    continue
+
                 resource = self.get_resource(buffer.uri)
                 if resource is None:
                     raise RuntimeError(f'Missing resource: "{buffer.uri}" (referenced in buffer with index {i})')
                 self.embed_resource(resource)
 
+                # Restart enumeration since embedding resource may have removed more than one buffer
+                enumerated_buffers = None
+                break
+
     def _embed_image_resources(self):
         if self.model.images is None:
             return
-        for i, image in list(enumerate(self.model.images)):
-            if image.uri is not None and image.bufferView is None:
+
+        enumerated_images = None
+        while enumerated_images is None:
+            enumerated_images = enumerate(iter(self.model.images))
+            for i, image in enumerated_images:
+                if image.uri is None or image.bufferView is not None:
+                    continue
+
                 resource = self.get_resource(image.uri)
                 if resource is None:
                     raise RuntimeError(f'Missing resource: "{image.uri}" (referenced in image with index {i})')
                 self.embed_resource(resource)
+
+                # Restart enumeration since embedding resource may have removed more than one image
+                enumerated_images = None
+                break
 
     def _get_glb_buffer(self):
         """
@@ -641,10 +661,13 @@ class GLTF:
         return len(self.model.bufferViews) - 1
 
     def _update_model_after_embedding_resource(self, resource: GLTFResource, offset: int, bytelen: int):
+        resource_uris = {resource.uri}
+        if isinstance(resource, FileResource):
+            resource_uris.add(resource.filename)
         if self.model.buffers is not None:
             enumerated_buffers = list(enumerate(self.model.buffers))
             for i, buffer in enumerated_buffers:
-                if buffer.uri == resource.uri:
+                if buffer.uri in resource_uris:
                     # Remove the buffer since it is now embedded
                     self.model.buffers.remove(buffer)
                     # Update any buffers views that point to this buffer
@@ -656,7 +679,7 @@ class GLTF:
                                 buffer_view.buffer -= 1
         if self.model.images is not None:
             for i, image in enumerate(self.model.images):
-                if image.uri == resource.uri:
+                if image.uri in resource_uris:
                     image.bufferView = self._create_embedded_image_buffer_view(offset, bytelen)
                     if isinstance(resource, Base64Resource):
                         image.uri = None
