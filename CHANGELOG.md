@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.0.12](https://github.com/sergkr/gltflib/releases/tag/v1.0.12) - 2021-09-21
+
+### Fixed
+- Handle scenario where multiple buffers or images point to same URI when embedding.
+
 ## [1.0.11](https://github.com/sergkr/gltflib/releases/tag/v1.0.11) - 2021-08-28
 
 ### Fixed
