@@ -42,7 +42,7 @@ env:
   - DATACLASSES_JSON_VERSION=0.4.5
   # Perform another test run on latest available version of dataclasses-json. This will need to be updated manually
   # as new versions become available.
-  - DATACLASSES_JSON_VERSION=0.5.4
+  - DATACLASSES_JSON_VERSION=0.5.6
 install:
   # Install original requirements (as specified in requirements.txt)
   - pip install -q -r requirements.txt
@@ -63,4 +63,4 @@ jobs:
   - python: 3.6
     env: DATACLASSES_VERSION=0.6 DATACLASSES_JSON_VERSION=0.4.5
   - python: 3.6
-    env: DATACLASSES_VERSION=0.7 DATACLASSES_JSON_VERSION=0.5.4
+    env: DATACLASSES_VERSION=0.7 DATACLASSES_JSON_VERSION=0.5.6
