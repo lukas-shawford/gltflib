@@ -34,4 +34,4 @@ typing-extensions==3.10.0.2
 typing-inspect==0.7.1
 urllib3==1.26.6
 webencodings==0.5.1
-zipp==3.5.0
+zipp==3.5.1
