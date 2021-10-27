@@ -7,7 +7,7 @@ colorama==0.4.4
 cryptography==3.4.8
 dataclasses==0.7; python_version < '3.7'
 dataclasses-json==0.5.6
-docutils==0.17.1
+docutils==0.18
 idna==2.10
 importlib-metadata==4.8.1
 jeepney==0.7.1
