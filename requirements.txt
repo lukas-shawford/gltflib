@@ -19,7 +19,7 @@ packaging==21.0
 pkginfo==1.7.1
 pycparser==2.20
 Pygments==2.10.0
-pyparsing==2.4.7
+pyparsing==3.0.3
 python-magic==0.4.24
 readme-renderer==29.0
 requests==2.26.0
