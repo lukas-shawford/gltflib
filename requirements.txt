@@ -21,7 +21,7 @@ pycparser==2.20
 Pygments==2.10.0
 pyparsing==2.4.7
 python-magic==0.4.24
-readme-renderer==29.0
+readme-renderer==34.0
 requests==2.26.0
 requests-toolbelt==0.9.1
 rfc3986==1.5.0
