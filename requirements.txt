@@ -1,5 +1,5 @@
 bleach==4.1.0
-certifi==2021.5.30
+certifi==2022.6.15
 cffi==1.14.6
 chardet==4.0.0
 charset-normalizer==2.0.6
