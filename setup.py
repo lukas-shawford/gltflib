@@ -87,6 +87,7 @@ setup(
     install_requires=REQUIRED,
     extras_require=EXTRAS,
     include_package_data=True,
+    package_data={"gltflib":["py.typed"]},
     license='MIT',
     classifiers=[
         # Trove classifiers
