@@ -64,13 +64,10 @@ class GLTF:
             BOM), defaulting to UTF-8 if cannot be inferred.
         :return: GLTF instance
         """
-        gltf = GLTF(model=None, resources=resources)
-        with open(filename, 'rb') as f:
-            data = f.read()
-            json = GLTF._decode_bytes(data, encoding)
-            gltf.model = GLTFModel.from_json(json)
         basepath = path.dirname(filename)
-        gltf._load_resources(basepath, load_file_resources)
+        with open(filename, 'rb') as f:
+            return cls.read_gltf(f, load_file_resources=load_file_resources, resources=resources,
+                    encoding=encoding, basepath=basepath)
         return gltf
 
     @classmethod
@@ -90,12 +87,61 @@ class GLTF:
             guessed from one of several supported encodings (based on BOM), defaulting to UTF-8 if cannot be inferred.
         :return: GLTF instance
         """
-        gltf = GLTF(model=None, resources=resources)
-        with open(filename, 'rb') as f:
-            gltf._load_glb(f, encoding)
         basepath = path.dirname(filename)
+        with open(filename, 'rb') as f:
+            return cls.read_glb(f, load_file_resources=load_file_resources, resources=resources,
+                    encoding=encoding, basepath=basepath)
+        return gltf
+
+    @classmethod
+    def read_gltf(cls: 'GLTF', stream: BinaryIO, load_file_resources = False, resources: List[GLTFResource] = None,
+                encoding: str = None, basepath: str = None) \
+            -> 'GLTF':
+        """
+        Loads a model in GLTF format from a stream
+        :param stream: The stream withthe GLB data
+        :param load_file_resources: If True, external file resources that are not provided via the "resources"
+            array will be loaded from the filesystem. The paths are assumed to be relative to the GLTF file.
+        :param resources: Optional list of pre-loaded resources. Any resources referenced in the GLTF file that are
+            present in the resources array will be used instead of loading those resources from the external
+            source.
+        :param encoding: File encoding (if known). Per the spec, glTF should use UTF-8 without BOM. However, to
+            accommodate working with models that do not fully adhere to the spec, the file may be read with a different
+            encoding. If not passed in, the encoding will be guessed from one of several supported encodings (based on
+            BOM), defaulting to UTF-8 if cannot be inferred.
+        :param basepath: Base path for loading file resources.
+        :return: GLTF instance
+        """
+        gltf = GLTF(model=None, resources=resources)
+        data = stream.read()
+        json = GLTF._decode_bytes(data, encoding)
+        gltf.model = GLTFModel.from_json(json)
         gltf._load_resources(basepath, load_file_resources)
         return gltf
+
+    @classmethod
+    def read_glb(cls: 'GLTF', stream: BinaryIO, load_file_resources = False, resources: List[GLTFResource] = None,
+                encoding: str = None, basepath: str = None) -> 'GLTF':
+        """
+        Loads a model in GLB format from a filename
+        :param stream: The stream withthe GLTF data
+        :param load_file_resources: If True, external file resources that are not provided via the "resources"
+            array will be loaded from the filesystem. The paths are assumed to be relative to the GLTF file.
+        :param resources: Optional list of pre-loaded resources. Any resources referenced in the GLTF file that are
+            present in the resources array will be used instead of loading those resources from the external
+            source.
+        :param encoding: File encoding (if known) of the JSON chunk within the GLB. Per the spec, JSON data should be
+            encoded using UTF-8 (without BOM). However, to accommodate working with models that do not fully adhere to
+            the spec, the JSON chunk may be read with a different encoding. If not passed in, the encoding will be
+            guessed from one of several supported encodings (based on BOM), defaulting to UTF-8 if cannot be inferred.
+        :param basepath: Base path for loading file resources.
+        :return: GLTF instance
+        """
+        gltf = GLTF(model=None, resources=resources)
+        gltf._load_glb(stream, encoding)
+        gltf._load_resources(basepath, load_file_resources)
+        return gltf
+
 
     @property
     def glb_resources(self):
@@ -126,10 +172,11 @@ class GLTF:
         :param save_file_resources: If True, external file resources present in the resources list will be saved
         :return Exported GLTF instance.
         """
-        gltf = self.clone()
+        create_parent_dirs(filename)
+        basepath = path.dirname(filename)
         # noinspection PyProtectedMember
-        gltf._export_gltf(filename, save_file_resources)
-        return gltf
+        with open(filename, "wb") as f:
+            return self.write_gltf(f, save_file_resources=save_file_resources, basepath=basepath)
 
     def export_glb(self, filename: str, embed_buffer_resources=True, embed_image_resources=True,
                    save_file_resources=True) -> 'GLTF':
@@ -150,10 +197,72 @@ class GLTF:
             be mutated) since the resources and associated buffers and buffer views may potentially change if the
             resources become embedded (e.g., when converting from GLTF to GLB).
         """
-        glb = self.clone()
+        create_parent_dirs(filename)
+        basepath = path.dirname(filename)
         # noinspection PyProtectedMember
-        glb._export_glb(filename, embed_buffer_resources, embed_image_resources, save_file_resources)
-        return glb
+        with open(filename, "wb") as f:
+            return self.write_glb(f, embed_buffer_resources=embed_buffer_resources, embed_image_resources=embed_image_resources,
+                    save_file_resources=save_file_resources, basepath=basepath)
+
+    def write_gltf(self, stream: BinaryIO, save_file_resources=True, basepath=None):
+        """
+        Exports the model to a GLTF stream
+        :param stream: Output stream
+        :param save_file_resources: If True, external file resources present in the resources list will be saved
+        :param basepath: directory in which to save the file resources
+        :return Exported GLTF instance.
+        """
+        gltf = self.clone()
+        gltf._write_gltf(stream, save_file_resources=save_file_resources, basepath=basepath)
+        return gltf
+
+    def write_glb(self, stream: BinaryIO, embed_buffer_resources=True, embed_image_resources=True,
+                save_file_resources=True, basepath: str=None) -> None:
+        """
+        Exports the model to a GLB stream
+        :param stream: Output stream
+        :param embed_buffer_resources: If True, buffer resources will be embedded in the GLB. The default value is True.
+            Note that only file and data URI resources will be converted. External network resources will be left as
+            they are. Note: If there are any buffers that use file resources which you wish to leave as external file
+            references, set this to False and convert the resources individually before calling export_glb.
+        :param embed_image_resources: If True, image resources will be embedded in the GLB. The default value is True.
+            Note that only file and data URI resources will be converted. External network resources will be left as
+            they are. Note: If there are any images that use file resources which you wish to leave as external file
+            references, set this to False and convert the resources individually before calling export_glb.
+        :param save_file_resources: If True, any external file resources that are not being embedded in the GLB
+            will be saved (in addition to the main GLB file). The default value is True.
+        :return Exported GLTF instance. This instance will be distinct from the original GLTF instance (which will not
+            be mutated) since the resources and associated buffers and buffer views may potentially change if the
+            resources become embedded (e.g., when converting from GLTF to GLB).
+        """
+        gltf = self.clone()
+        gltf._write_glb(stream, embed_buffer_resources=embed_buffer_resources, embed_image_resources=embed_image_resources,
+                save_file_resources=save_file_resources, basepath=basepath)
+        return gltf
+
+    def _write_gltf(self, stream: BinaryIO, save_file_resources=True, basepath=None):
+        if any(isinstance(resource, GLBResource) for resource in (self.resources or [])):
+            raise TypeError("Model may not contain resources of type GLBResource when exporting to GLTF. "
+                            "Convert the GLBResource to a FileResource, Base64Resource, or ExternalResource using the "
+                            "provided helper methods in this class (GLTF.convert_to_file_resource,"
+                            "GLTF.convert_to_base64_resource, or GLTF.convert_to_external_resource) prior to "
+                            "exporting to GLTF, or export to GLB instead.")
+        data = self.model.to_json()
+        stream.write(data.encode("UTF-8"))
+        if save_file_resources:
+            self._validate_resources()
+            self._export_file_resources(basepath)
+
+    def _write_glb(self, stream: BinaryIO, embed_buffer_resources=True, embed_image_resources=True,
+                save_file_resources=True, basepath: str=None) -> None:
+        if embed_buffer_resources:
+            self._embed_buffer_resources()
+        if embed_image_resources:
+            self._embed_image_resources()
+        self._write_glb_proper(stream)
+        if save_file_resources:
+            self._validate_resources()
+            self._export_file_resources(basepath)
 
     def clone(self) -> 'GLTF':
         """
@@ -451,36 +560,6 @@ class GLTF:
         resource = GLBResource(b, chunk_type)
         self.resources.append(resource)
 
-    def _export_gltf(self, filename: str, save_file_resources=True) -> None:
-        if any(isinstance(resource, GLBResource) for resource in (self.resources or [])):
-            raise TypeError("Model may not contain resources of type GLBResource when exporting to GLTF. "
-                            "Convert the GLBResource to a FileResource, Base64Resource, or ExternalResource using the "
-                            "provided helper methods in this class (GLTF.convert_to_file_resource,"
-                            "GLTF.convert_to_base64_resource, or GLTF.convert_to_external_resource) prior to "
-                            "exporting to GLTF, or export to GLB instead.")
-        create_parent_dirs(filename)
-        data = self.model.to_json()
-        with open(filename, 'w', encoding='utf-8') as f:
-            f.write(data)
-        if save_file_resources:
-            self._validate_resources()
-            basepath = path.dirname(filename)
-            self._export_file_resources(basepath)
-
-    def _export_glb(self, filename: str, embed_buffer_resources=True, embed_image_resources=True,
-                    save_file_resources=True) -> None:
-        if embed_buffer_resources:
-            self._embed_buffer_resources()
-        if embed_image_resources:
-            self._embed_image_resources()
-        create_parent_dirs(filename)
-        with open(filename, 'wb') as f:
-            self._write_glb(f)
-        if save_file_resources:
-            self._validate_resources()
-            basepath = path.dirname(filename)
-            self._export_file_resources(basepath)
-
     def _get_resource_uris_from_model(self) -> Set:
         uris = set()
         if self.model.buffers is not None:
@@ -510,7 +589,7 @@ class GLTF:
         for _, image in self._get_images_by_uri(old_uri):
             image.uri = new_uri
 
-    def _write_glb(self, f: BinaryIO):
+    def _write_glb_proper(self, f: BinaryIO):
         self._prepare_glb()
         self._write_glb_header(f)
         self._write_glb_body(f)
