@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.0.13](https://github.com/sergkr/gltflib/releases/tag/v1.0.13) - 2022-08-22
+
+### Added
+- Added ability to read and write from a stream (instead of a file).
+- Output typing information for py.typed.
+
 ## [1.0.12](https://github.com/sergkr/gltflib/releases/tag/v1.0.12) - 2021-09-21
 
 ### Fixed
