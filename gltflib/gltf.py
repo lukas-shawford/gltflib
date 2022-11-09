@@ -4,7 +4,7 @@ import warnings
 import codecs
 from os import path
 from urllib.parse import urlparse, unquote
-from typing import Tuple, List, Iterator, Iterable, Optional, Set, BinaryIO
+from typing import Tuple, List, Iterator, Iterable, Optional, Set, BinaryIO, Type
 from .gltf_resource import (
     GLTFResource, FileResource, ExternalResource, GLBResource, Base64Resource, GLB_JSON_CHUNK_TYPE,
     GLB_BINARY_CHUNK_TYPE)
@@ -20,8 +20,8 @@ class GLTF:
         self.resources = resources
 
     @classmethod
-    def load(cls: 'GLTF', filename: str, load_file_resources=False, resources: List[GLTFResource] = None,
-             encoding: str = None) -> 'GLTF':
+    def load(cls: Type['GLTF'], filename: str, load_file_resources: bool = False,
+             resources: Optional[List[GLTFResource]] = None, encoding: Optional[str] = None) -> 'GLTF':
         """
         Loads a GLTF or GLB model from a filename. The model format will be inferred from the filename extension.
         :param filename: Path to the GLTF or GLB file
@@ -47,9 +47,8 @@ class GLTF:
                            f'the filename does not follow the convention but the format is known.')
 
     @classmethod
-    def load_gltf(cls: 'GLTF', filename: str, load_file_resources=False, resources: List[GLTFResource] = None,
-                  encoding: str = None) \
-            -> 'GLTF':
+    def load_gltf(cls: Type['GLTF'], filename: str, load_file_resources: bool = False,
+                  resources: Optional[List[GLTFResource]] = None, encoding: Optional[str] = None) -> 'GLTF':
         """
         Loads a model in GLTF format from a filename
         :param filename: Path to the GLTF file
@@ -68,11 +67,10 @@ class GLTF:
         with open(filename, 'rb') as f:
             return cls.read_gltf(f, load_file_resources=load_file_resources, resources=resources,
                     encoding=encoding, basepath=basepath)
-        return gltf
 
     @classmethod
-    def load_glb(cls: 'GLTF', filename: str, load_file_resources=False, resources: List[GLTFResource] = None,
-                 encoding: str = None) -> 'GLTF':
+    def load_glb(cls: Type['GLTF'], filename: str, load_file_resources: bool = False,
+                 resources: Optional[List[GLTFResource]] = None, encoding: Optional[str] = None) -> 'GLTF':
         """
         Loads a model in GLB format from a filename
         :param filename: Path to the GLB file
@@ -91,12 +89,11 @@ class GLTF:
         with open(filename, 'rb') as f:
             return cls.read_glb(f, load_file_resources=load_file_resources, resources=resources,
                     encoding=encoding, basepath=basepath)
-        return gltf
 
     @classmethod
-    def read_gltf(cls: 'GLTF', stream: BinaryIO, load_file_resources = False, resources: List[GLTFResource] = None,
-                encoding: str = None, basepath: str = None) \
-            -> 'GLTF':
+    def read_gltf(cls: Type['GLTF'], stream: BinaryIO, load_file_resources: bool = False,
+                  resources: Optional[List[GLTFResource]] = None, encoding: Optional[str] = None,
+                  basepath: Optional[str] = None) -> 'GLTF':
         """
         Loads a model in GLTF format from a stream
         :param stream: The stream withthe GLB data
@@ -120,8 +117,9 @@ class GLTF:
         return gltf
 
     @classmethod
-    def read_glb(cls: 'GLTF', stream: BinaryIO, load_file_resources = False, resources: List[GLTFResource] = None,
-                encoding: str = None, basepath: str = None) -> 'GLTF':
+    def read_glb(cls: Type['GLTF'], stream: BinaryIO, load_file_resources: bool = False,
+                 resources: Optional[List[GLTFResource]] = None, encoding: Optional[str] = None,
+                 basepath: Optional[str] = None) -> 'GLTF':
         """
         Loads a model in GLB format from a filename
         :param stream: The stream withthe GLTF data
@@ -217,7 +215,7 @@ class GLTF:
         return gltf
 
     def write_glb(self, stream: BinaryIO, embed_buffer_resources=True, embed_image_resources=True,
-                save_file_resources=True, basepath: str=None) -> None:
+                save_file_resources=True, basepath: str=None) -> 'GLTF':
         """
         Exports the model to a GLB stream
         :param stream: Output stream
@@ -472,7 +470,7 @@ class GLTF:
             return resource
 
     @classmethod
-    def _decode_bytes(cls: 'GLTF', data: bytes, encoding: str = None) -> str:
+    def _decode_bytes(cls: Type['GLTF'], data: bytes, encoding: Optional[str] = None) -> str:
         if encoding is not None:
             return data.decode(encoding, errors='replace')
         elif data.startswith(codecs.BOM_UTF16_BE):
