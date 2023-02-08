@@ -5,7 +5,7 @@ chardet==5.0.0
 charset-normalizer==2.1.1
 colorama==0.4.5
 commonmark==0.9.1
-cryptography==37.0.4
+cryptography==39.0.1
 dataclasses-json==0.5.7; python_version < '3.7'
 docutils==0.19
 idna==3.3
